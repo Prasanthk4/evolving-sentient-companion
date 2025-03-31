@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Brain, Cpu, Activity, Database, Zap, Settings } from 'lucide-react';
+import { Brain, Cpu, Activity, Database, Zap, Settings, Lightbulb } from 'lucide-react';
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
 import 'react-circular-progressbar/dist/styles.css';
 
@@ -9,6 +9,7 @@ const KarnaCore = () => {
   const [memoryUsage, setMemoryUsage] = useState(32);
   const [processingStatus, setProcessingStatus] = useState('idle');
   const [isActive, setIsActive] = useState(true);
+  const [learningProgress, setLearningProgress] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -18,6 +19,11 @@ const KarnaCore = () => {
       const statuses = ['processing', 'learning', 'analyzing', 'idle'];
       const randomIndex = Math.floor(Math.random() * statuses.length);
       setProcessingStatus(statuses[randomIndex]);
+      
+      // Simulate learning progress
+      if (statuses[randomIndex] === 'learning') {
+        setLearningProgress(prev => (prev + Math.random() * 10) % 100);
+      }
     }, 3000);
 
     return () => clearInterval(interval);
@@ -94,6 +100,21 @@ const KarnaCore = () => {
         </div>
       </div>
       
+      {processingStatus === 'learning' && (
+        <div className="glass-panel p-3 mb-4">
+          <div className="text-sm mb-2 flex items-center">
+            <Lightbulb className="text-jarvis-blue mr-2" size={16} />
+            <span>Self-Learning Progress</span>
+          </div>
+          <div className="bg-jarvis-dark h-2 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-jarvis-accent to-jarvis-success"
+              style={{ width: `${learningProgress}%`, transition: 'width 0.5s ease-in-out' }}
+            ></div>
+          </div>
+        </div>
+      )}
+      
       <div className="glass-panel p-3 flex-1">
         <h3 className="text-sm font-medium mb-2 flex items-center">
           <Zap className="text-jarvis-blue mr-1" size={14} /> Active Processes
@@ -117,6 +138,14 @@ const KarnaCore = () => {
               <span className="text-jarvis-blue">Running</span>
             </div>
           )}
+          <div className="flex justify-between items-center">
+            <span>Ollama Interface</span>
+            <span className="text-jarvis-blue">Connected</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span>Gemini Interface</span>
+            <span className="text-jarvis-blue">Standby</span>
+          </div>
           <div className="flex justify-between items-center">
             <span>Facial Recognition</span>
             <span className="text-jarvis-blue">Active</span>

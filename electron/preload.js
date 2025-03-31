@@ -21,4 +21,46 @@ contextBridge.exposeInMainWorld('electron', {
   speak: (text) => {
     ipcRenderer.send('speak-text', text);
   },
+  ollama: {
+    query: (prompt, model) => {
+      return new Promise((resolve, reject) => {
+        const requestId = Date.now().toString();
+        
+        const responseHandler = (event, { id, response, error }) => {
+          if (id === requestId) {
+            ipcRenderer.removeListener('ollama-response', responseHandler);
+            if (error) {
+              reject(error);
+            } else {
+              resolve(response);
+            }
+          }
+        };
+        
+        ipcRenderer.on('ollama-response', responseHandler);
+        ipcRenderer.send('ollama-query', { id: requestId, prompt, model });
+      });
+    }
+  },
+  gemini: {
+    query: (prompt) => {
+      return new Promise((resolve, reject) => {
+        const requestId = Date.now().toString();
+        
+        const responseHandler = (event, { id, response, error }) => {
+          if (id === requestId) {
+            ipcRenderer.removeListener('gemini-response', responseHandler);
+            if (error) {
+              reject(error);
+            } else {
+              resolve(response);
+            }
+          }
+        };
+        
+        ipcRenderer.on('gemini-response', responseHandler);
+        ipcRenderer.send('gemini-query', { id: requestId, prompt });
+      });
+    }
+  }
 });

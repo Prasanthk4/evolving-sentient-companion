@@ -6,7 +6,8 @@ import FaceRecognition from './FaceRecognition';
 import SpeechRecognition from './SpeechRecognition';
 import MultiAgentSystem from './MultiAgentSystem';
 import SystemMonitor from './SystemMonitor';
-import { Database, Brain, Zap, Network, FileCode, MessageSquare, BarChart, ChevronLeft, ChevronRight, Cpu, Laugh } from 'lucide-react';
+import SelfLearning from './SelfLearning';
+import { Database, Brain, Zap, Network, FileCode, MessageSquare, BarChart, ChevronLeft, ChevronRight, Cpu, Laugh, Lightbulb } from 'lucide-react';
 
 const KarnaDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -29,6 +30,7 @@ const KarnaDashboard = () => {
             <div className="flex flex-col items-center space-y-8">
               <NavButton icon={Brain} label="Think" active={activeTab === 'think'} onClick={() => setActiveTab('think')} />
               <NavButton icon={MessageSquare} label="Chat" active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} />
+              <NavButton icon={Lightbulb} label="Learn" active={activeTab === 'learn'} onClick={() => setActiveTab('learn')} />
               <NavButton icon={Database} label="Memory" active={activeTab === 'memory'} onClick={() => setActiveTab('memory')} />
               <NavButton icon={Cpu} label="System" active={activeTab === 'system'} onClick={() => setActiveTab('system')} />
               <NavButton icon={Laugh} label="Humor" active={activeTab === 'humor'} onClick={() => setActiveTab('humor')} />
@@ -61,6 +63,7 @@ const KarnaDashboard = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 {activeTab === 'think' && <KarnaCore />}
                 {activeTab === 'system' && <SystemMonitor />}
+                {activeTab === 'learn' && <SelfLearning />}
                 {(activeTab === 'think' || activeTab === 'chat') && <MultiAgentSystem />}
               </div>
               <SpeechRecognition />

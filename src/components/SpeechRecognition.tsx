@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, Volume2, Square, MessageSquare } from 'lucide-react';
+import { getAIResponse, getLearnedResponse } from '@/utils/aiLearning';
 
-// Type declaration for Speech Recognition API
 interface SpeechRecognitionEvent extends Event {
   results: SpeechRecognitionResultList;
 }
@@ -12,7 +11,6 @@ interface SpeechRecognitionResult {
   isFinal: boolean;
 }
 
-// This is a simplified version using the browser's SpeechRecognition API
 const SpeechRecognition = () => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -26,12 +24,10 @@ const SpeechRecognition = () => {
   const messageEndRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
-    // Scroll to bottom when messages change
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
   
   useEffect(() => {
-    // Initialize speech recognition with browser compatibility
     if (typeof window !== 'undefined') {
       const SpeechRecognitionAPI = window.SpeechRecognition || 
                                 (window as any).webkitSpeechRecognition;
@@ -46,7 +42,6 @@ const SpeechRecognition = () => {
           const transcript = result[0].transcript;
           setTranscript(transcript);
           
-          // Simulate audio level
           setAudioLevel(Math.random() * 80 + 20);
           
           if (result.isFinal) {
@@ -74,7 +69,6 @@ const SpeechRecognition = () => {
   }, []);
   
   useEffect(() => {
-    // Simulate audio level changes when listening
     let interval: NodeJS.Timeout;
     if (isListening) {
       interval = setInterval(() => {
@@ -109,8 +103,55 @@ const SpeechRecognition = () => {
     }
   };
   
-  const generateResponse = (userMessage: string) => {
-    // Simple response logic with humor (in a real app, this would call an LLM)
+  const generateResponse = async (userMessage: string) => {
+    const isLearningRequest = userMessage.toLowerCase().includes('learn about') || 
+                             userMessage.toLowerCase().includes('teach you about');
+    
+    let topic = 'general';
+    let prompt = userMessage;
+    
+    if (isLearningRequest) {
+      const learnMatches = userMessage.match(/learn about (.*?)(?:$|\.|\?)/i) || 
+                           userMessage.match(/teach you about (.*?)(?:$|\.|\?)/i);
+      
+      if (learnMatches && learnMatches[1]) {
+        topic = learnMatches[1].trim();
+        prompt = `Tell me about ${topic}`;
+        
+        setMessages(prev => [...prev, {
+          text: `I'll learn about "${topic}" for you. This might take a moment...`,
+          isUser: false
+        }]);
+        
+        try {
+          const aiResponse = await getAIResponse(prompt, topic);
+          setMessages(prev => [...prev, {text: aiResponse, isUser: false}]);
+          speakResponse(aiResponse);
+          return;
+        } catch (error) {
+          console.error('Learning error:', error);
+          setMessages(prev => [...prev, {
+            text: "I'm sorry, I couldn't learn about that right now. My learning systems seem to be offline.",
+            isUser: false
+          }]);
+          speakResponse("I'm sorry, I couldn't learn about that right now. My learning systems seem to be offline.");
+          return;
+        }
+      }
+    }
+    
+    const topicMatches = Object.keys(userMessage.match(/(?:about|on) (.*?)(?:$|\.|\?)/i) || {});
+    if (topicMatches.length > 1) {
+      const possibleTopic = topicMatches[1].trim();
+      const learnedResponse = getLearnedResponse(possibleTopic, userMessage);
+      
+      if (learnedResponse) {
+        setMessages(prev => [...prev, {text: learnedResponse, isUser: false}]);
+        speakResponse(learnedResponse);
+        return;
+      }
+    }
+    
     let response = "I'm processing your request. It's like trying to find a needle in a digital haystack!";
     
     if (userMessage.toLowerCase().includes('hello') || userMessage.toLowerCase().includes('hi')) {
@@ -132,6 +173,8 @@ const SpeechRecognition = () => {
       response = "I am KARNA, your Knowledge-Acquiring Responsive Networked Assistant. But between you and me, I'm also quite funny. What can I help you with today?";
     } else if (userMessage.toLowerCase().includes('thank')) {
       response = "You're welcome! It's my digital pleasure to assist. If computers could have hobbies, helping you would be mine!";
+    } else if (userMessage.toLowerCase().includes('learn')) {
+      response = "I'd love to learn something new! Try saying 'teach you about' followed by a topic. I use both Ollama and Gemini to expand my knowledge.";
     } else {
       response = "I understand you're saying something about '" + 
         userMessage.substring(0, 20) + 
@@ -139,10 +182,7 @@ const SpeechRecognition = () => {
         "'. I'm still learning, but I'd be happy to help if you could clarify. My humor module suggests that's what she said, but my judgment module overruled it.";
     }
     
-    // Add response to messages
     setMessages(prev => [...prev, {text: response, isUser: false}]);
-    
-    // Simulate text-to-speech
     speakResponse(response);
   };
   

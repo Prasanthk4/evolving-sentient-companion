@@ -77,6 +77,38 @@ ipcMain.on('speak-text', (event, text) => {
   console.log('Speaking:', text);
 });
 
+// Mock implementation for Ollama queries
+ipcMain.on('ollama-query', (event, { id, prompt, model }) => {
+  console.log(`Ollama query (${id}):`, prompt, model);
+  
+  // Simulate processing time
+  setTimeout(() => {
+    const response = {
+      response: `This is a simulated response from Ollama about "${prompt}".`,
+      model: model || 'llama3',
+      created_at: new Date().toISOString(),
+      done: true
+    };
+    
+    event.sender.send('ollama-response', { id, response });
+  }, 1500);
+});
+
+// Mock implementation for Gemini queries
+ipcMain.on('gemini-query', (event, { id, prompt }) => {
+  console.log(`Gemini query (${id}):`, prompt);
+  
+  // Simulate processing time
+  setTimeout(() => {
+    const response = {
+      text: `This is a simulated response from Gemini about "${prompt}".`,
+      model: 'gemini-pro'
+    };
+    
+    event.sender.send('gemini-response', { id, response });
+  }, 2000);
+});
+
 app.on('ready', createWindow);
 
 app.on('window-all-closed', () => {
