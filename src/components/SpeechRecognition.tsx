@@ -2,8 +2,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, Volume2, PlayCircle, Square, MessageSquare } from 'lucide-react';
 
+// Type declaration for Speech Recognition API
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionResult {
+  transcript: string;
+  isFinal: boolean;
+}
+
 // This is a simplified version using the browser's SpeechRecognition API
-// In a real implementation, you would use a more sophisticated library like Whisper
 const SpeechRecognition = () => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -22,35 +31,39 @@ const SpeechRecognition = () => {
   }, [messages]);
   
   useEffect(() => {
-    // Initialize speech recognition
-    const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
+    // Initialize speech recognition with browser compatibility
+    if (typeof window !== 'undefined') {
+      const SpeechRecognitionAPI = window.SpeechRecognition || 
+                                (window as any).webkitSpeechRecognition;
       
-      recognitionRef.current.onresult = (event: any) => {
-        const result = event.results[event.results.length - 1];
-        const transcript = result[0].transcript;
-        setTranscript(transcript);
+      if (SpeechRecognitionAPI) {
+        recognitionRef.current = new SpeechRecognitionAPI();
+        recognitionRef.current.continuous = true;
+        recognitionRef.current.interimResults = true;
         
-        // Simulate audio level
-        setAudioLevel(Math.random() * 80 + 20);
+        recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
+          const result = event.results[event.results.length - 1];
+          const transcript = result[0].transcript;
+          setTranscript(transcript);
+          
+          // Simulate audio level
+          setAudioLevel(Math.random() * 80 + 20);
+          
+          if (result.isFinal) {
+            addUserMessage(transcript);
+            setTimeout(() => generateResponse(transcript), 500);
+          }
+        };
         
-        if (result.isFinal) {
-          addUserMessage(transcript);
-          setTimeout(() => generateResponse(transcript), 500);
-        }
-      };
-      
-      recognitionRef.current.onerror = (event: any) => {
-        console.error('Speech recognition error', event.error);
-        setIsListening(false);
-      };
-      
-      recognitionRef.current.onend = () => {
-        setIsListening(false);
-      };
+        recognitionRef.current.onerror = (event: any) => {
+          console.error('Speech recognition error', event.error);
+          setIsListening(false);
+        };
+        
+        recognitionRef.current.onend = () => {
+          setIsListening(false);
+        };
+      }
     }
     
     return () => {
