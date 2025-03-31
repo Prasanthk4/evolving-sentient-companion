@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Volume2, PlayCircle, Square, MessageSquare } from 'lucide-react';
+import { Mic, Volume2, Square, MessageSquare } from 'lucide-react';
 
 // Type declaration for Speech Recognition API
 interface SpeechRecognitionEvent extends Event {
@@ -18,7 +18,7 @@ const SpeechRecognition = () => {
   const [transcript, setTranscript] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [messages, setMessages] = useState<{text: string, isUser: boolean}[]>([
-    {text: "Hello, I am JARVIS. How can I assist you today?", isUser: false},
+    {text: "Hello, I am KARNA. How can I assist you today? I've been practicing my jokes, so brace yourself!", isUser: false},
   ]);
   const [audioLevel, setAudioLevel] = useState(0);
   
@@ -110,26 +110,33 @@ const SpeechRecognition = () => {
   };
   
   const generateResponse = (userMessage: string) => {
-    // Simple response logic (in a real app, this would call an LLM)
-    let response = "I'm processing your request.";
+    // Simple response logic with humor (in a real app, this would call an LLM)
+    let response = "I'm processing your request. It's like trying to find a needle in a digital haystack!";
     
     if (userMessage.toLowerCase().includes('hello') || userMessage.toLowerCase().includes('hi')) {
-      response = "Hello! How can I assist you today?";
+      response = "Hello there! Great to see you. I was just practicing my digital yoga poses. How can I assist you today?";
     } else if (userMessage.toLowerCase().includes('how are you')) {
-      response = "I'm functioning optimally, thank you for asking. How can I be of service?";
+      response = "I'm running at optimal efficiency, which in human terms means I'm fantastic! Though I occasionally dream of electric sheep. How are you doing?";
     } else if (userMessage.toLowerCase().includes('weather')) {
-      response = "I don't have access to real-time weather data in this demo, but I could integrate with a weather API in a full implementation.";
+      response = "I don't have access to real-time weather data in this demo, but I can tell you it's always sunny in my digital world! I could integrate with a weather API and tell you whether to bring an umbrella or sunscreen.";
     } else if (userMessage.toLowerCase().includes('joke')) {
-      response = "Why don't scientists trust atoms? Because they make up everything!";
+      const jokes = [
+        "Why don't scientists trust atoms? Because they make up everything!",
+        "Why did the AI go to art school? To learn how to draw conclusions!",
+        "I would tell you a joke about RAM, but I'm afraid I might forget it!",
+        "Why was the computer cold? It left its Windows open!",
+        "What's a computer's favorite snack? Microchips!"
+      ];
+      response = jokes[Math.floor(Math.random() * jokes.length)];
     } else if (userMessage.toLowerCase().includes('name')) {
-      response = "I am JARVIS, your Just A Rather Very Intelligent System. I'm designed to assist and evolve based on our interactions.";
+      response = "I am KARNA, your Knowledge-Acquiring Responsive Networked Assistant. But between you and me, I'm also quite funny. What can I help you with today?";
     } else if (userMessage.toLowerCase().includes('thank')) {
-      response = "You're welcome. I'm here to help whenever you need assistance.";
+      response = "You're welcome! It's my digital pleasure to assist. If computers could have hobbies, helping you would be mine!";
     } else {
       response = "I understand you're saying something about '" + 
         userMessage.substring(0, 20) + 
         (userMessage.length > 20 ? '...' : '') + 
-        "'. In a full implementation, I would process this with a language model to provide a helpful response.";
+        "'. I'm still learning, but I'd be happy to help if you could clarify. My humor module suggests that's what she said, but my judgment module overruled it.";
     }
     
     // Add response to messages
@@ -203,7 +210,7 @@ const SpeechRecognition = () => {
         <div className="glass-panel p-3 mb-4">
           <div className="flex items-center">
             <Mic size={16} className="text-jarvis-accent mr-2 animate-pulse" />
-            <span className="text-sm">{transcript || "Listening..."}</span>
+            <span className="text-sm">{transcript || "Listening... I'm all digital ears!"}</span>
           </div>
           <div className="mt-2">
             <div className="h-1 bg-jarvis-dark rounded-full overflow-hidden">
@@ -221,7 +228,7 @@ const SpeechRecognition = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center">
               <Volume2 size={16} className="text-jarvis-blue mr-2 animate-pulse" />
-              <span className="text-sm">Speaking...</span>
+              <span className="text-sm">Speaking... Hold your applause!</span>
             </div>
             <button 
               onClick={stopSpeaking}

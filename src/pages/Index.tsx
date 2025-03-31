@@ -1,9 +1,9 @@
 
 import React from 'react';
-import JarvisDashboard from '@/components/JarvisDashboard';
+import KarnaDashboard from '@/components/KarnaDashboard';
 
 const Index = () => {
-  return <JarvisDashboard />;
+  return <KarnaDashboard />;
 };
 
 export default Index;

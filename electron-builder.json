@@ -1,0 +1,28 @@
+
+{
+  "appId": "com.karna.desktop",
+  "productName": "KARNA",
+  "directories": {
+    "output": "release/"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*"
+  ],
+  "mac": {
+    "category": "public.app-category.productivity",
+    "icon": "public/favicon.ico"
+  },
+  "win": {
+    "target": [
+      "nsis"
+    ],
+    "icon": "public/favicon.ico"
+  },
+  "linux": {
+    "target": [
+      "AppImage"
+    ],
+    "category": "Utility"
+  }
+}
