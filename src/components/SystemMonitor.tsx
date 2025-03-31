@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
-import { Cpu, HardDrive, Memory, Thermometer, Wifi, Clock } from 'lucide-react';
+import { Cpu, HardDrive, Microchip, Thermometer, Wifi, Clock } from 'lucide-react';
 import 'react-circular-progressbar/dist/styles.css';
 
 const SystemMonitor = () => {
@@ -129,7 +129,7 @@ const SystemMonitor = () => {
           
           <div className="flex justify-between items-center">
             <div className="flex items-center">
-              <Memory size={14} className="text-jarvis-blue mr-2" />
+              <Microchip size={14} className="text-jarvis-blue mr-2" />
               <span>Memory Available</span>
             </div>
             <span>{Math.round(100 - memoryUsage)}%</span>
