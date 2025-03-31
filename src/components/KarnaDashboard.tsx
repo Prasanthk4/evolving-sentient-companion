@@ -7,6 +7,7 @@ import SpeechRecognition from './SpeechRecognition';
 import MultiAgentSystem from './MultiAgentSystem';
 import SystemMonitor from './SystemMonitor';
 import SelfLearning from './SelfLearning';
+import MemorySystem from './MemorySystem';
 import { Database, Brain, Zap, Network, FileCode, MessageSquare, BarChart, ChevronLeft, ChevronRight, Cpu, Laugh, Lightbulb } from 'lucide-react';
 
 const KarnaDashboard = () => {
@@ -64,7 +65,8 @@ const KarnaDashboard = () => {
                 {activeTab === 'think' && <KarnaCore />}
                 {activeTab === 'system' && <SystemMonitor />}
                 {activeTab === 'learn' && <SelfLearning />}
-                {(activeTab === 'think' || activeTab === 'chat') && <MultiAgentSystem />}
+                {activeTab === 'memory' && <MemorySystem />}
+                {(activeTab === 'think' || activeTab === 'chat' || activeTab === 'memory') && <MultiAgentSystem />}
               </div>
               <SpeechRecognition />
             </div>

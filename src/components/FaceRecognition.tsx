@@ -1,9 +1,13 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { Camera, User, CheckCircle, XCircle } from 'lucide-react';
+import { 
+  loadOwnerProfile, 
+  updateFaceSignature, 
+  recognizeOwnerFace 
+} from '@/utils/memoryManager';
+import { toast } from '@/components/ui/use-toast';
 
-// This is a simplified version using the browser's face detection API
-// In a real implementation, you would use a more sophisticated library like face-api.js or MediaPipe
 const FaceRecognition = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -11,6 +15,11 @@ const FaceRecognition = () => {
   const [faceDetected, setFaceDetected] = useState(false);
   const [user, setUser] = useState<string | null>(null);
   const [confidence, setConfidence] = useState(0);
+  const [recognitionLog, setRecognitionLog] = useState<{time: string, text: string, isOwner: boolean}[]>([
+    {time: "10:42:15", text: "User recognized", isOwner: true},
+    {time: "10:35:22", text: "Unknown face detected", isOwner: false},
+    {time: "10:21:03", text: "User recognized", isOwner: true}
+  ]);
 
   useEffect(() => {
     let faceDetectionInterval: NodeJS.Timeout;
@@ -36,10 +45,52 @@ const FaceRecognition = () => {
               setFaceDetected(true);
               setConfidence(Math.floor(Math.random() * 30) + 70); // 70-99% confidence
               
-              // Simulate recognized user (toggle between known and unknown)
-              if (randomValue > 0.6) {
-                setUser("User");
+              const ownerProfile = loadOwnerProfile();
+              
+              // Check if we have an owner profile
+              if (ownerProfile) {
+                // Simulate face recognition match with higher probability
+                const isOwner = randomValue > 0.4;
+                
+                if (isOwner) {
+                  setUser(ownerProfile.name);
+                  
+                  // Add log entry if not too many already
+                  if (recognitionLog.length === 0 || 
+                      recognitionLog[0].text !== `${ownerProfile.name} recognized`) {
+                    const now = new Date();
+                    setRecognitionLog(prev => [{
+                      time: now.toLocaleTimeString(),
+                      text: `${ownerProfile.name} recognized`,
+                      isOwner: true
+                    }, ...prev.slice(0, 9)]);
+                  }
+                  
+                  // First time recognition, store face data
+                  if (!ownerProfile.faceSignature) {
+                    // This is simplified for demo, would actually capture facial features
+                    updateFaceSignature(Date.now().toString());
+                    toast({
+                      title: "Face Recognition Set",
+                      description: `I've saved your face signature, ${ownerProfile.name}.`
+                    });
+                  }
+                } else {
+                  setUser(null);
+                  
+                  // Add log entry if not too many already
+                  if (recognitionLog.length === 0 || 
+                      recognitionLog[0].text !== "Unknown face detected") {
+                    const now = new Date();
+                    setRecognitionLog(prev => [{
+                      time: now.toLocaleTimeString(),
+                      text: "Unknown face detected",
+                      isOwner: false
+                    }, ...prev.slice(0, 9)]);
+                  }
+                }
               } else {
+                // No owner profile yet
                 setUser(null);
               }
               
@@ -170,7 +221,7 @@ const FaceRecognition = () => {
       <div className="glass-panel p-3 flex-1">
         <h3 className="text-sm font-medium mb-2">Recognition Log</h3>
         <div className="space-y-2 text-xs max-h-24 overflow-y-auto">
-          {faceDetected && (
+          {faceDetected && recognitionLog.length > 0 && recognitionLog[0].time !== new Date().toLocaleTimeString() && (
             <>
               <div className="flex justify-between items-center">
                 <span className="text-jarvis-blue">{new Date().toLocaleTimeString()}</span>
@@ -179,20 +230,18 @@ const FaceRecognition = () => {
               <div className="h-px bg-jarvis-dark"></div>
             </>
           )}
-          <div className="flex justify-between items-center opacity-70">
-            <span className="text-jarvis-blue">10:42:15</span>
-            <span>User recognized</span>
-          </div>
-          <div className="h-px bg-jarvis-dark"></div>
-          <div className="flex justify-between items-center opacity-70">
-            <span className="text-jarvis-blue">10:35:22</span>
-            <span>Unknown face detected</span>
-          </div>
-          <div className="h-px bg-jarvis-dark"></div>
-          <div className="flex justify-between items-center opacity-50">
-            <span className="text-jarvis-blue">10:21:03</span>
-            <span>User recognized</span>
-          </div>
+          
+          {recognitionLog.map((log, index) => (
+            <React.Fragment key={index}>
+              <div className={`flex justify-between items-center ${index > 0 ? 'opacity-' + (70 - index * 10) : ''}`}>
+                <span className="text-jarvis-blue">{log.time}</span>
+                <span>{log.text}</span>
+              </div>
+              {index < recognitionLog.length - 1 && (
+                <div className="h-px bg-jarvis-dark"></div>
+              )}
+            </React.Fragment>
+          ))}
         </div>
       </div>
     </div>

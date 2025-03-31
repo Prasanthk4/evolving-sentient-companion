@@ -1,6 +1,15 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Volume2, Square, MessageSquare } from 'lucide-react';
+import { Mic, Volume2, Square, MessageSquare, User } from 'lucide-react';
 import { getAIResponse, getLearnedResponse } from '@/utils/aiLearning';
+import { 
+  addConversationToMemory, 
+  initializeOwnerProfile, 
+  loadOwnerProfile, 
+  recognizeOwnerVoice,
+  getRecentConversations
+} from '@/utils/memoryManager';
+import { toast } from '@/components/ui/use-toast';
 
 interface SpeechRecognitionEvent extends Event {
   results: SpeechRecognitionResultList;
@@ -19,6 +28,7 @@ const SpeechRecognition = () => {
     {text: "Hello, I am KARNA. How can I assist you today? I've been practicing my jokes, so brace yourself!", isUser: false},
   ]);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [ownerRecognized, setOwnerRecognized] = useState(false);
   
   const recognitionRef = useRef<any>(null);
   const messageEndRef = useRef<HTMLDivElement>(null);
@@ -26,6 +36,14 @@ const SpeechRecognition = () => {
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+  
+  // Check for owner profile on mount
+  useEffect(() => {
+    const ownerProfile = loadOwnerProfile();
+    if (ownerProfile) {
+      setOwnerRecognized(true);
+    }
+  }, []);
   
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -46,6 +64,25 @@ const SpeechRecognition = () => {
           
           if (result.isFinal) {
             addUserMessage(transcript);
+            
+            // If no owner profile exists, check if this is a setup command
+            const ownerProfile = loadOwnerProfile();
+            if (!ownerProfile && (transcript.toLowerCase().includes("i am") || transcript.toLowerCase().includes("my name is"))) {
+              const nameMatch = transcript.match(/(?:I am|my name is) (\w+)/i);
+              if (nameMatch && nameMatch[1]) {
+                const ownerName = nameMatch[1];
+                initializeOwnerProfile(ownerName);
+                setOwnerRecognized(true);
+                
+                setTimeout(() => {
+                  const response = `Hello ${ownerName}, I've registered you as my owner. I'll remember your voice and our conversations from now on. It's a pleasure to meet you!`;
+                  setMessages(prev => [...prev, {text: response, isUser: false}]);
+                  speakResponse(response);
+                }, 500);
+                return;
+              }
+            }
+            
             setTimeout(() => generateResponse(transcript), 500);
           }
         };
@@ -104,6 +141,24 @@ const SpeechRecognition = () => {
   };
   
   const generateResponse = async (userMessage: string) => {
+    // Check for memory-related queries
+    if (userMessage.toLowerCase().includes("do you remember") || 
+        userMessage.toLowerCase().includes("what did we talk about")) {
+      
+      const recentConversations = getRecentConversations(5);
+      
+      if (recentConversations.length > 0) {
+        const response = "Yes, I remember our recent conversations. Here's what we discussed: " + 
+          recentConversations.map(conv => `"${conv.userMessage}"`).join(", ");
+          
+        setMessages(prev => [...prev, {text: response, isUser: false}]);
+        speakResponse(response);
+        addConversationToMemory(userMessage, response, "memory");
+        return;
+      }
+    }
+    
+    // Original learning logic
     const isLearningRequest = userMessage.toLowerCase().includes('learn about') || 
                              userMessage.toLowerCase().includes('teach you about');
     
@@ -127,14 +182,16 @@ const SpeechRecognition = () => {
           const aiResponse = await getAIResponse(prompt, topic);
           setMessages(prev => [...prev, {text: aiResponse, isUser: false}]);
           speakResponse(aiResponse);
+          
+          // Store in memory
+          addConversationToMemory(userMessage, aiResponse, topic);
           return;
         } catch (error) {
           console.error('Learning error:', error);
-          setMessages(prev => [...prev, {
-            text: "I'm sorry, I couldn't learn about that right now. My learning systems seem to be offline.",
-            isUser: false
-          }]);
-          speakResponse("I'm sorry, I couldn't learn about that right now. My learning systems seem to be offline.");
+          const errorResponse = "I'm sorry, I couldn't learn about that right now. My learning systems seem to be offline.";
+          setMessages(prev => [...prev, { text: errorResponse, isUser: false }]);
+          speakResponse(errorResponse);
+          addConversationToMemory(userMessage, errorResponse, "error");
           return;
         }
       }
@@ -148,14 +205,30 @@ const SpeechRecognition = () => {
       if (learnedResponse) {
         setMessages(prev => [...prev, {text: learnedResponse, isUser: false}]);
         speakResponse(learnedResponse);
+        addConversationToMemory(userMessage, learnedResponse, possibleTopic);
         return;
       }
     }
     
     let response = "I'm processing your request. It's like trying to find a needle in a digital haystack!";
     
-    if (userMessage.toLowerCase().includes('hello') || userMessage.toLowerCase().includes('hi')) {
-      response = "Hello there! Great to see you. I was just practicing my digital yoga poses. How can I assist you today?";
+    // Owner recognition
+    if (userMessage.toLowerCase().includes("who am i")) {
+      const ownerProfile = loadOwnerProfile();
+      if (ownerProfile) {
+        response = `You are ${ownerProfile.name}, my owner. We've been interacting since ${new Date(ownerProfile.lastSeen).toLocaleDateString()}. It's a pleasure to assist you!`;
+      } else {
+        response = "I don't have your identity stored yet. You can set up your profile by saying 'My name is [your name]'.";
+      }
+    }
+    // Personalized responses with owner name when appropriate
+    else if (userMessage.toLowerCase().includes('hello') || userMessage.toLowerCase().includes('hi')) {
+      const ownerProfile = loadOwnerProfile();
+      if (ownerProfile) {
+        response = `Hello ${ownerProfile.name}! Great to see you again. I was just practicing my digital yoga poses. How can I assist you today?`;
+      } else {
+        response = "Hello there! Great to see you. I was just practicing my digital yoga poses. How can I assist you today?";
+      }
     } else if (userMessage.toLowerCase().includes('how are you')) {
       response = "I'm running at optimal efficiency, which in human terms means I'm fantastic! Though I occasionally dream of electric sheep. How are you doing?";
     } else if (userMessage.toLowerCase().includes('weather')) {
@@ -184,6 +257,9 @@ const SpeechRecognition = () => {
     
     setMessages(prev => [...prev, {text: response, isUser: false}]);
     speakResponse(response);
+    
+    // Store conversation in memory
+    addConversationToMemory(userMessage, response);
   };
   
   const speakResponse = (text: string) => {
@@ -217,6 +293,12 @@ const SpeechRecognition = () => {
           <MessageSquare className="mr-2" /> Voice Interface
         </h2>
         <div className="flex items-center">
+          {ownerRecognized && (
+            <div className="flex items-center mr-3 text-jarvis-success">
+              <User size={14} className="mr-1" />
+              <span className="text-xs">{loadOwnerProfile()?.name || 'Owner'}</span>
+            </div>
+          )}
           <div className={`w-3 h-3 rounded-full mr-1 ${isListening ? 'bg-jarvis-success' : isPlaying ? 'bg-jarvis-blue' : 'bg-muted'}`}></div>
           <span className="text-sm text-muted-foreground">
             {isListening ? 'Listening' : isPlaying ? 'Speaking' : 'Ready'}

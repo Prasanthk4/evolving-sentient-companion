@@ -4,8 +4,11 @@ const path = require('path');
 const isDev = require('electron-is-dev');
 const os = require('os');
 const osUtils = require('node-os-utils');
+const fs = require('fs');
 
 let mainWindow;
+const userDataPath = app.getPath('userData');
+const memoryFilePath = path.join(userDataPath, 'karna-memory.json');
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -75,6 +78,31 @@ function setupSystemMonitoring() {
 ipcMain.on('speak-text', (event, text) => {
   // In a full implementation, you could use a native TTS engine here
   console.log('Speaking:', text);
+});
+
+// Memory persistence functions
+ipcMain.on('save-memory', (event, memoryData) => {
+  try {
+    fs.writeFileSync(memoryFilePath, JSON.stringify(memoryData, null, 2));
+    event.reply('memory-saved', { success: true });
+  } catch (error) {
+    console.error('Error saving memory:', error);
+    event.reply('memory-saved', { success: false, error: error.message });
+  }
+});
+
+ipcMain.on('load-memory', (event) => {
+  try {
+    if (fs.existsSync(memoryFilePath)) {
+      const memoryData = fs.readFileSync(memoryFilePath, 'utf8');
+      event.reply('memory-loaded', { success: true, data: JSON.parse(memoryData) });
+    } else {
+      event.reply('memory-loaded', { success: true, data: null });
+    }
+  } catch (error) {
+    console.error('Error loading memory:', error);
+    event.reply('memory-loaded', { success: false, error: error.message });
+  }
 });
 
 // Mock implementation for Ollama queries

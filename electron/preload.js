@@ -21,6 +21,24 @@ contextBridge.exposeInMainWorld('electron', {
   speak: (text) => {
     ipcRenderer.send('speak-text', text);
   },
+  memory: {
+    save: (data) => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('memory-saved', (event, result) => {
+          resolve(result);
+        });
+        ipcRenderer.send('save-memory', data);
+      });
+    },
+    load: () => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('memory-loaded', (event, result) => {
+          resolve(result);
+        });
+        ipcRenderer.send('load-memory');
+      });
+    }
+  },
   ollama: {
     query: (prompt, model) => {
       return new Promise((resolve, reject) => {
