@@ -44,40 +44,49 @@ const KarnaCore = () => {
     };
   }, []);
 
-  // Simulate KARNA's internal processing
+  // Update system status and broadcast to other components
   useEffect(() => {
+    // Broadcast status changes to other components
+    const broadcastStatus = () => {
+      const statusEvent = new CustomEvent('karna-status-update', {
+        detail: {
+          processingStatus,
+          activeModules
+        }
+      });
+      window.dispatchEvent(statusEvent);
+    };
+
+    broadcastStatus();
+    
     let timer: NodeJS.Timeout;
     
     const updateProcessingState = () => {
-      // Randomly change the processing status
-      const rand = Math.random();
+      // Get CPU and memory usage to determine processing status
+      const cpuUsage = systemStats?.cpu.usage || 0;
+      const memoryUsage = systemStats?.memory.usedPercentage || 0;
       
-      if (rand < 0.3) {
-        setProcessingStatus('idle');
-        setActiveModules(prev => ({
-          ...prev,
-          selfLearning: false,
-          dataAnalysis: false,
-          nlp: false
-        }));
-      } else if (rand < 0.5) {
-        setProcessingStatus('processing');
+      // Determine processing status based on system load
+      let newStatus = 'idle';
+      
+      if (cpuUsage > 70 || memoryUsage > 80) {
+        newStatus = 'processing';
         setActiveModules(prev => ({
           ...prev,
           selfLearning: false,
           dataAnalysis: false,
           nlp: true
         }));
-      } else if (rand < 0.7) {
-        setProcessingStatus('analyzing');
+      } else if (cpuUsage > 40 || memoryUsage > 60) {
+        newStatus = 'analyzing';
         setActiveModules(prev => ({
           ...prev,
           selfLearning: false,
           dataAnalysis: true,
           nlp: false
         }));
-      } else {
-        setProcessingStatus('learning');
+      } else if (Math.random() > 0.6) { // Sometimes go into learning mode
+        newStatus = 'learning';
         setActiveModules(prev => ({
           ...prev,
           selfLearning: true,
@@ -87,14 +96,26 @@ const KarnaCore = () => {
         
         // Update learning progress
         setLearningProgress(prev => (prev + Math.random() * 10) % 100);
+      } else {
+        setActiveModules(prev => ({
+          ...prev,
+          selfLearning: false,
+          dataAnalysis: false,
+          nlp: false
+        }));
       }
       
-      // Periodically update face/speech recognition status
+      setProcessingStatus(newStatus);
+      
+      // Periodically update face/speech recognition status based on actual system state
       setActiveModules(prev => ({
         ...prev,
-        faceRecognition: Math.random() > 0.5,
+        faceRecognition: document.querySelector('video')?.srcObject !== null,
         speechRecognition: Math.random() > 0.7
       }));
+      
+      // Broadcast the updated status
+      setTimeout(broadcastStatus, 100);
       
       // Schedule next update
       timer = setTimeout(updateProcessingState, 5000 + Math.random() * 5000);
@@ -107,7 +128,7 @@ const KarnaCore = () => {
     return () => {
       clearTimeout(timer);
     };
-  }, []);
+  }, [systemStats, processingStatus, activeModules]);
 
   const handleAdvancedSettings = () => {
     toast({

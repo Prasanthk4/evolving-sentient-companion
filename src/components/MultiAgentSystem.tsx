@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Network, Brain, Database, Heart, Lightbulb, AlertCircle } from 'lucide-react';
 
@@ -40,77 +39,167 @@ const agents = [
   },
 ];
 
+interface SystemStatus {
+  processingStatus: string;
+  activeModules: {
+    selfLearning: boolean;
+    dataAnalysis: boolean;
+    nlp: boolean;
+    ollama: boolean;
+    gemini: boolean;
+    faceRecognition: boolean;
+    speechRecognition: boolean;
+    knowledgeDB: boolean;
+    humorModule: boolean;
+  };
+}
+
 const MultiAgentSystem = () => {
   const [activeAgents, setActiveAgents] = useState<string[]>(['thinker', 'memory']);
   const [links, setLinks] = useState<{source: string, target: string, strength: number}[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+  const [systemMessages, setSystemMessages] = useState<string[]>([]);
   
   useEffect(() => {
-    // Generate random connections between agents
-    const generateLinks = () => {
-      const newLinks: {source: string, target: string, strength: number}[] = [];
+    // Listen for system status updates from main process
+    const statusChannel = (status: SystemStatus) => {
+      setSystemStatus(status);
       
-      // Always connect thinker to active agents
-      activeAgents.forEach(agent => {
-        if (agent !== 'thinker') {
-          newLinks.push({
-            source: 'thinker',
-            target: agent,
-            strength: Math.random() * 0.5 + 0.5, // 0.5 to 1
-          });
-        }
-      });
+      // Update active agents based on processing status
+      const newActiveAgents = ['thinker'];
       
-      // Add some random connections
-      for (let i = 0; i < activeAgents.length; i++) {
-        for (let j = i + 1; j < activeAgents.length; j++) {
-          if (Math.random() > 0.3) { // 70% chance to create a link
-            newLinks.push({
-              source: activeAgents[i],
-              target: activeAgents[j],
-              strength: Math.random() * 0.7 + 0.3, // 0.3 to 1
-            });
-          }
-        }
+      if (status.processingStatus === 'analyzing' || status.processingStatus === 'learning') {
+        newActiveAgents.push('critic');
       }
       
-      setLinks(newLinks);
+      if (status.activeModules.knowledgeDB) {
+        newActiveAgents.push('memory');
+      }
+      
+      if (status.activeModules.humorModule) {
+        newActiveAgents.push('personality');
+      }
+      
+      if (status.processingStatus === 'learning') {
+        newActiveAgents.push('creative');
+      }
+      
+      // Only update if the active agents have changed
+      if (JSON.stringify(newActiveAgents.sort()) !== JSON.stringify([...activeAgents].sort())) {
+        setActiveAgents(newActiveAgents);
+        
+        // Add a system message about agent changes
+        const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+        if (newActiveAgents.length > activeAgents.length) {
+          const newAgents = newActiveAgents.filter(a => !activeAgents.includes(a));
+          newAgents.forEach(agentId => {
+            const agent = agents.find(a => a.id === agentId);
+            if (agent) {
+              addSystemMessage(`${timeString}: ${agent.name} activated`);
+            }
+          });
+        } else if (newActiveAgents.length < activeAgents.length) {
+          const removedAgents = activeAgents.filter(a => !newActiveAgents.includes(a));
+          removedAgents.forEach(agentId => {
+            const agent = agents.find(a => a.id === agentId);
+            if (agent) {
+              addSystemMessage(`${timeString}: ${agent.name} deactivated`);
+            }
+          });
+        }
+      }
     };
     
+    // Subscribe to system status from KarnaCore
+    const subscription = window.addEventListener('karna-status-update', (event: any) => {
+      if (event.detail) {
+        statusChannel(event.detail);
+      }
+    });
+    
+    // Generate initial links
     generateLinks();
+    
+    // Add initial system message
+    addSystemMessage(`${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'})}: System initialized with ${activeAgents.length} agents`);
     
     // Regenerate links periodically
     const interval = setInterval(() => {
       generateLinks();
-      
-      // Randomly activate/deactivate agents
-      if (Math.random() > 0.7) {
-        const inactiveAgents = agents.filter(a => !activeAgents.includes(a.id)).map(a => a.id);
-        
-        if (inactiveAgents.length > 0 && activeAgents.length < 4) {
-          // Activate a random agent
-          const randomAgent = inactiveAgents[Math.floor(Math.random() * inactiveAgents.length)];
-          setActiveAgents(prev => [...prev, randomAgent]);
-        } else if (activeAgents.length > 2) {
-          // Deactivate a random agent that's not the thinker
-          const deactivateCandidates = activeAgents.filter(a => a !== 'thinker');
-          const randomAgent = deactivateCandidates[Math.floor(Math.random() * deactivateCandidates.length)];
-          setActiveAgents(prev => prev.filter(a => a !== randomAgent));
-        }
-      }
     }, 5000);
     
-    return () => clearInterval(interval);
+    return () => {
+      window.removeEventListener('karna-status-update', (event: any) => {
+        if (event.detail) {
+          statusChannel(event.detail);
+        }
+      });
+      clearInterval(interval);
+    };
   }, [activeAgents]);
   
+  // Add a system message with timestamp
+  const addSystemMessage = (message: string) => {
+    setSystemMessages(prev => {
+      const newMessages = [message, ...prev];
+      // Keep only the 10 most recent messages
+      return newMessages.slice(0, 10);
+    });
+  };
+  
+  // Generate links between active agents
+  const generateLinks = () => {
+    const newLinks: {source: string, target: string, strength: number}[] = [];
+    
+    // Always connect thinker to active agents
+    activeAgents.forEach(agent => {
+      if (agent !== 'thinker') {
+        newLinks.push({
+          source: 'thinker',
+          target: agent,
+          strength: Math.random() * 0.5 + 0.5, // 0.5 to 1
+        });
+      }
+    });
+    
+    // Add some random connections
+    for (let i = 0; i < activeAgents.length; i++) {
+      for (let j = i + 1; j < activeAgents.length; j++) {
+        if (Math.random() > 0.3) { // 70% chance to create a link
+          newLinks.push({
+            source: activeAgents[i],
+            target: activeAgents[j],
+            strength: Math.random() * 0.7 + 0.3, // 0.3 to 1
+          });
+        }
+      }
+    }
+    
+    setLinks(newLinks);
+  };
+  
+  // Toggle agent activation
   const toggleAgent = (agentId: string) => {
     if (agentId === 'thinker') return; // Can't deactivate the thinker
     
+    const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+    const agent = agents.find(a => a.id === agentId);
+    
     if (activeAgents.includes(agentId)) {
       setActiveAgents(prev => prev.filter(a => a !== agentId));
+      if (agent) {
+        addSystemMessage(`${timeString}: ${agent.name} deactivated by user`);
+      }
     } else {
       setActiveAgents(prev => [...prev, agentId]);
+      if (agent) {
+        addSystemMessage(`${timeString}: ${agent.name} activated by user`);
+      }
     }
+    
+    // Generate new links for the updated agents
+    setTimeout(generateLinks, 100);
   };
 
   return (
@@ -235,18 +324,11 @@ const MultiAgentSystem = () => {
             <span>System is using {activeAgents.length} agents to process your requests</span>
           </div>
           <div className="h-px bg-jarvis-dark"></div>
-          {activeAgents.map(agentId => {
-            const agent = agents.find(a => a.id === agentId)!;
-            return (
-              <div key={agentId} className="flex items-center opacity-80">
-                <div 
-                  className="w-2 h-2 rounded-full mr-2"
-                  style={{backgroundColor: agent.color}}
-                ></div>
-                <span>{agent.name} active</span>
-              </div>
-            );
-          })}
+          {systemMessages.map((message, index) => (
+            <div key={index} className="flex items-center opacity-80">
+              <span>{message}</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
