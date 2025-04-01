@@ -5,10 +5,15 @@ const isDev = require('electron-is-dev');
 const os = require('os');
 const osUtils = require('node-os-utils');
 const fs = require('fs');
+const fetch = require('node-fetch');
 
 let mainWindow;
 const userDataPath = app.getPath('userData');
 const memoryFilePath = path.join(userDataPath, 'karna-memory.json');
+
+// Configuration for LLM services
+const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434/api';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || ''; // Set your Gemini API key in environment variables
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -105,36 +110,104 @@ ipcMain.on('load-memory', (event) => {
   }
 });
 
-// Mock implementation for Ollama queries
-ipcMain.on('ollama-query', (event, { id, prompt, model }) => {
+// Real implementation for Ollama queries
+ipcMain.on('ollama-query', async (event, { id, prompt, model }) => {
   console.log(`Ollama query (${id}):`, prompt, model);
   
-  // Simulate processing time
-  setTimeout(() => {
-    const response = {
-      response: `This is a simulated response from Ollama about "${prompt}".`,
-      model: model || 'llama3',
-      created_at: new Date().toISOString(),
-      done: true
-    };
+  try {
+    // Use default model if not specified
+    const modelToUse = model || 'llama3';
     
-    event.sender.send('ollama-response', { id, response });
-  }, 1500);
+    // Call actual Ollama API
+    const response = await fetch(`${OLLAMA_API_URL}/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: modelToUse,
+        prompt,
+        stream: false,
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Ollama API error: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    
+    event.sender.send('ollama-response', {
+      id,
+      response: {
+        response: data.response,
+        model: modelToUse,
+        created_at: new Date().toISOString(),
+        done: true
+      }
+    });
+  } catch (error) {
+    console.error('Error querying Ollama:', error);
+    event.sender.send('ollama-response', {
+      id,
+      error: error.message
+    });
+  }
 });
 
-// Mock implementation for Gemini queries
-ipcMain.on('gemini-query', (event, { id, prompt }) => {
+// Real implementation for Gemini queries
+ipcMain.on('gemini-query', async (event, { id, prompt }) => {
   console.log(`Gemini query (${id}):`, prompt);
   
-  // Simulate processing time
-  setTimeout(() => {
-    const response = {
-      text: `This is a simulated response from Gemini about "${prompt}".`,
-      model: 'gemini-pro'
-    };
+  try {
+    if (!GEMINI_API_KEY) {
+      throw new Error('Gemini API key not found. Set the GEMINI_API_KEY environment variable.');
+    }
     
-    event.sender.send('gemini-response', { id, response });
-  }, 2000);
+    // Call actual Gemini API
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: prompt
+          }]
+        }]
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    
+    // Extract text from the response
+    let text = '';
+    if (data.candidates && data.candidates.length > 0 && 
+        data.candidates[0].content && data.candidates[0].content.parts) {
+      text = data.candidates[0].content.parts.map(part => part.text).join('');
+    }
+    
+    event.sender.send('gemini-response', {
+      id,
+      response: {
+        text,
+        model: 'gemini-pro'
+      }
+    });
+  } catch (error) {
+    console.error('Error querying Gemini:', error);
+    event.sender.send('gemini-response', {
+      id,
+      error: error.message
+    });
+  }
 });
 
 app.on('ready', createWindow);

@@ -106,50 +106,38 @@ export const addLearningInteraction = (
   }
 };
 
-// Query Ollama API
+// Query Ollama API using electron IPC
 export const queryOllama = async (prompt: string, model: string = 'llama3'): Promise<string> => {
   try {
-    // This would normally call the Ollama API via an electron IPC channel
-    // For demo purposes, we'll simulate a response
-    // In a real app, this would be:
-    // const response = await window.electron.ollama.query(prompt, model);
+    if (!window.electron) {
+      throw new Error('Electron IPC not available');
+    }
     
     console.log(`Querying Ollama with: ${prompt}`);
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // Mock response
-    const mockResponse: OllamaResponse = {
-      response: `Here's what I know about ${prompt}. This is a simulated response from Ollama.`,
-      model,
-      created_at: new Date().toISOString(),
-      done: true
-    };
+    // Use actual Electron IPC to query Ollama
+    const response = await window.electron.ollama.query(prompt, model);
     
-    return mockResponse.response;
+    return response.response;
   } catch (error) {
     console.error('Error querying Ollama:', error);
     throw new Error('Failed to get response from Ollama');
   }
 };
 
-// Query Gemini API
+// Query Gemini API using electron IPC
 export const queryGemini = async (prompt: string): Promise<string> => {
   try {
-    // This would normally call the Gemini API via an electron IPC channel
-    // For demo purposes, we'll simulate a response
+    if (!window.electron) {
+      throw new Error('Electron IPC not available');
+    }
     
     console.log(`Querying Gemini with: ${prompt}`);
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1200));
     
-    // Mock response
-    const mockResponse: GeminiResponse = {
-      text: `I've analyzed "${prompt}" and here's my response. This is a simulated response from Gemini.`,
-      model: 'gemini-pro'
-    };
+    // Use actual Electron IPC to query Gemini
+    const response = await window.electron.gemini.query(prompt);
     
-    return mockResponse.text;
+    return response.text;
   } catch (error) {
     console.error('Error querying Gemini:', error);
     throw new Error('Failed to get response from Gemini');
@@ -160,6 +148,11 @@ export const queryGemini = async (prompt: string): Promise<string> => {
 export const getAIResponse = async (prompt: string, topic: string = 'general'): Promise<string> => {
   try {
     // Try Ollama first
+    toast({
+      title: "Learning in progress",
+      description: `KARNA is connecting to Ollama to learn about "${topic}"...`,
+    });
+    
     const response = await queryOllama(prompt);
     
     // Store this interaction for learning
@@ -176,6 +169,11 @@ export const getAIResponse = async (prompt: string, topic: string = 'general'): 
     
     try {
       // Fallback to Gemini
+      toast({
+        title: "Learning in progress",
+        description: `KARNA is connecting to Gemini to learn about "${topic}"...`,
+      });
+      
       const response = await queryGemini(prompt);
       
       // Store this interaction for learning
@@ -189,6 +187,13 @@ export const getAIResponse = async (prompt: string, topic: string = 'general'): 
       return response;
     } catch (secondError) {
       console.error('Both AI systems failed:', secondError);
+      
+      toast({
+        title: "Learning failed",
+        description: "Failed to connect to any AI systems. Please check your connections.",
+        variant: "destructive"
+      });
+      
       throw new Error('Failed to get a response from any AI system');
     }
   }
