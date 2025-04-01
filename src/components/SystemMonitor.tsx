@@ -9,6 +9,7 @@ interface SystemStats {
     usage: number;
     count: number;
     model: string;
+    temperature?: number;
   };
   memory: {
     total: number;
@@ -19,18 +20,18 @@ interface SystemStats {
     usedPercentage: number;
   };
   uptime: number;
+  network: {
+    status: 'Online' | 'Offline';
+  };
 }
 
 const SystemMonitor = () => {
   const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
-  const [cpuTemp, setCpuTemp] = useState(45); // Temperature still simulated as it requires additional tools
   
   useEffect(() => {
     // Subscribe to system stats updates from Electron
     const unsubscribe = window.electron?.systemStats.subscribe((stats: SystemStats) => {
       setSystemStats(stats);
-      // Simulate CPU temp fluctuations - in a real system this would come from native APIs
-      setCpuTemp(prev => Math.min(Math.max(prev + (Math.random() * 2 - 1), 35), 85));
     });
     
     // Cleanup subscription on component unmount
@@ -79,12 +80,12 @@ const SystemMonitor = () => {
         <div className="glass-panel p-2 flex flex-col items-center">
           <div className="w-14 h-14 mb-2">
             <CircularProgressbar 
-              value={cpuTemp} 
-              text={`${Math.round(cpuTemp)}°`}
+              value={systemStats?.cpu.temperature || 0} 
+              text={`${Math.round(systemStats?.cpu.temperature || 0)}°`}
               styles={buildStyles({
                 textSize: '25px',
-                pathColor: cpuTemp > 75 ? '#FF5757' : cpuTemp > 65 ? '#FFB800' : '#0AEFFF',
-                textColor: cpuTemp > 75 ? '#FF5757' : cpuTemp > 65 ? '#FFB800' : '#0AEFFF',
+                pathColor: (systemStats?.cpu.temperature || 0) > 75 ? '#FF5757' : (systemStats?.cpu.temperature || 0) > 65 ? '#FFB800' : '#0AEFFF',
+                textColor: (systemStats?.cpu.temperature || 0) > 75 ? '#FF5757' : (systemStats?.cpu.temperature || 0) > 65 ? '#FFB800' : '#0AEFFF',
                 trailColor: '#1E2A3A',
               })}
             />
@@ -141,7 +142,9 @@ const SystemMonitor = () => {
               <Wifi size={14} className="text-jarvis-blue mr-2" />
               <span>Network</span>
             </div>
-            <span className="text-jarvis-success">Online</span>
+            <span className={`${systemStats?.network?.status === 'Online' ? 'text-jarvis-success' : 'text-jarvis-accent'}`}>
+              {systemStats?.network?.status || 'Unknown'}
+            </span>
           </div>
           
           <div className="flex justify-between items-center">
@@ -165,8 +168,14 @@ const SystemMonitor = () => {
               <Thermometer size={14} className="text-jarvis-blue mr-2" />
               <span>Temperature</span>
             </div>
-            <span className={cpuTemp > 75 ? 'text-jarvis-accent' : cpuTemp > 65 ? 'text-jarvis-warning' : 'text-jarvis-success'}>
-              {Math.round(cpuTemp)}°C
+            <span className={
+              (systemStats?.cpu.temperature || 0) > 75 
+                ? 'text-jarvis-accent' 
+                : (systemStats?.cpu.temperature || 0) > 65 
+                  ? 'text-jarvis-warning' 
+                  : 'text-jarvis-success'
+            }>
+              {Math.round(systemStats?.cpu.temperature || 0)}°C
             </span>
           </div>
         </div>
