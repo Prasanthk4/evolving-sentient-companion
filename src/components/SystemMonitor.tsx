@@ -4,32 +4,49 @@ import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
 import { Cpu, HardDrive, Microchip, Thermometer, Wifi, Clock } from 'lucide-react';
 import 'react-circular-progressbar/dist/styles.css';
 
+interface SystemStats {
+  cpu: {
+    usage: number;
+    count: number;
+    model: string;
+  };
+  memory: {
+    total: number;
+    free: number;
+    usedPercentage: number;
+  };
+  disk: {
+    usedPercentage: number;
+  };
+  uptime: number;
+}
+
 const SystemMonitor = () => {
-  const [cpuTemp, setCpuTemp] = useState(45);
-  const [cpuUsage, setCpuUsage] = useState(35);
-  const [memoryUsage, setMemoryUsage] = useState(42);
-  const [diskUsage, setDiskUsage] = useState(68);
-  const [uptime, setUptime] = useState('2h 14m');
-  const [network, setNetwork] = useState('Online');
+  const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
+  const [cpuTemp, setCpuTemp] = useState(45); // Temperature still simulated as it requires additional tools
   
-  // In the actual Electron app, we would use the node-os-utils package
-  // to get real system information
   useEffect(() => {
-    const interval = setInterval(() => {
-      // Simulate fluctuating system metrics
-      setCpuTemp(prev => Math.min(Math.max(prev + (Math.random() * 4 - 2), 35), 85));
-      setCpuUsage(prev => Math.min(Math.max(prev + (Math.random() * 10 - 5), 10), 95));
-      setMemoryUsage(prev => Math.min(Math.max(prev + (Math.random() * 8 - 4), 20), 90));
-      setDiskUsage(prev => Math.min(Math.max(prev + (Math.random() * 2 - 1), 50), 95));
-      
-      // Update uptime
-      const hours = Math.floor(Math.random() * 10) + 2;
-      const minutes = Math.floor(Math.random() * 60);
-      setUptime(`${hours}h ${minutes}m`);
-    }, 5000);
+    // Subscribe to system stats updates from Electron
+    const unsubscribe = window.electron?.systemStats.subscribe((stats: SystemStats) => {
+      setSystemStats(stats);
+      // Simulate CPU temp fluctuations - in a real system this would come from native APIs
+      setCpuTemp(prev => Math.min(Math.max(prev + (Math.random() * 2 - 1), 35), 85));
+    });
     
-    return () => clearInterval(interval);
+    // Cleanup subscription on component unmount
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
+  
+  // Format uptime to hours and minutes
+  const formatUptime = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return `${hours}h ${minutes}m`;
+  };
   
   return (
     <div className="glass-panel p-5 h-full flex flex-col">
@@ -46,12 +63,12 @@ const SystemMonitor = () => {
         <div className="glass-panel p-2 flex flex-col items-center">
           <div className="w-14 h-14 mb-2">
             <CircularProgressbar 
-              value={cpuUsage} 
-              text={`${Math.round(cpuUsage)}%`}
+              value={systemStats?.cpu.usage || 0} 
+              text={`${Math.round(systemStats?.cpu.usage || 0)}%`}
               styles={buildStyles({
                 textSize: '25px',
-                pathColor: cpuUsage > 80 ? '#FF5757' : cpuUsage > 60 ? '#FFB800' : '#0AEFFF',
-                textColor: cpuUsage > 80 ? '#FF5757' : cpuUsage > 60 ? '#FFB800' : '#0AEFFF',
+                pathColor: (systemStats?.cpu.usage || 0) > 80 ? '#FF5757' : (systemStats?.cpu.usage || 0) > 60 ? '#FFB800' : '#0AEFFF',
+                textColor: (systemStats?.cpu.usage || 0) > 80 ? '#FF5757' : (systemStats?.cpu.usage || 0) > 60 ? '#FFB800' : '#0AEFFF',
                 trailColor: '#1E2A3A',
               })}
             />
@@ -78,12 +95,12 @@ const SystemMonitor = () => {
         <div className="glass-panel p-2 flex flex-col items-center">
           <div className="w-14 h-14 mb-2">
             <CircularProgressbar 
-              value={memoryUsage} 
-              text={`${Math.round(memoryUsage)}%`}
+              value={systemStats?.memory.usedPercentage || 0} 
+              text={`${Math.round(systemStats?.memory.usedPercentage || 0)}%`}
               styles={buildStyles({
                 textSize: '25px',
-                pathColor: memoryUsage > 80 ? '#FF5757' : memoryUsage > 60 ? '#FFB800' : '#0AEFFF',
-                textColor: memoryUsage > 80 ? '#FF5757' : memoryUsage > 60 ? '#FFB800' : '#0AEFFF',
+                pathColor: (systemStats?.memory.usedPercentage || 0) > 80 ? '#FF5757' : (systemStats?.memory.usedPercentage || 0) > 60 ? '#FFB800' : '#0AEFFF',
+                textColor: (systemStats?.memory.usedPercentage || 0) > 80 ? '#FF5757' : (systemStats?.memory.usedPercentage || 0) > 60 ? '#FFB800' : '#0AEFFF',
                 trailColor: '#1E2A3A',
               })}
             />
@@ -94,12 +111,12 @@ const SystemMonitor = () => {
         <div className="glass-panel p-2 flex flex-col items-center">
           <div className="w-14 h-14 mb-2">
             <CircularProgressbar 
-              value={diskUsage} 
-              text={`${Math.round(diskUsage)}%`}
+              value={systemStats?.disk.usedPercentage || 0} 
+              text={`${Math.round(systemStats?.disk.usedPercentage || 0)}%`}
               styles={buildStyles({
                 textSize: '25px',
-                pathColor: diskUsage > 80 ? '#FF5757' : diskUsage > 60 ? '#FFB800' : '#0AEFFF',
-                textColor: diskUsage > 80 ? '#FF5757' : diskUsage > 60 ? '#FFB800' : '#0AEFFF',
+                pathColor: (systemStats?.disk.usedPercentage || 0) > 80 ? '#FF5757' : (systemStats?.disk.usedPercentage || 0) > 60 ? '#FFB800' : '#0AEFFF',
+                textColor: (systemStats?.disk.usedPercentage || 0) > 80 ? '#FF5757' : (systemStats?.disk.usedPercentage || 0) > 60 ? '#FFB800' : '#0AEFFF',
                 trailColor: '#1E2A3A',
               })}
             />
@@ -116,7 +133,7 @@ const SystemMonitor = () => {
               <Clock size={14} className="text-jarvis-blue mr-2" />
               <span>Uptime</span>
             </div>
-            <span>{uptime}</span>
+            <span>{systemStats ? formatUptime(systemStats.uptime) : 'Loading...'}</span>
           </div>
           
           <div className="flex justify-between items-center">
@@ -124,7 +141,7 @@ const SystemMonitor = () => {
               <Wifi size={14} className="text-jarvis-blue mr-2" />
               <span>Network</span>
             </div>
-            <span className="text-jarvis-success">{network}</span>
+            <span className="text-jarvis-success">Online</span>
           </div>
           
           <div className="flex justify-between items-center">
@@ -132,7 +149,7 @@ const SystemMonitor = () => {
               <Microchip size={14} className="text-jarvis-blue mr-2" />
               <span>Memory Available</span>
             </div>
-            <span>{Math.round(100 - memoryUsage)}%</span>
+            <span>{systemStats ? Math.round(100 - systemStats.memory.usedPercentage) : 0}%</span>
           </div>
           
           <div className="flex justify-between items-center">
@@ -140,7 +157,7 @@ const SystemMonitor = () => {
               <HardDrive size={14} className="text-jarvis-blue mr-2" />
               <span>Disk Space</span>
             </div>
-            <span>{Math.round(100 - diskUsage)}% Free</span>
+            <span>{systemStats ? Math.round(100 - systemStats.disk.usedPercentage) : 0}% Free</span>
           </div>
           
           <div className="flex justify-between items-center">

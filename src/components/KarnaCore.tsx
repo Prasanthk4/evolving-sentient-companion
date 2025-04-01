@@ -2,32 +2,119 @@
 import React, { useState, useEffect } from 'react';
 import { Brain, Cpu, Activity, Database, Zap, Settings, Lightbulb } from 'lucide-react';
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
+import { toast } from '@/components/ui/use-toast';
 import 'react-circular-progressbar/dist/styles.css';
 
+interface SystemStats {
+  cpu: {
+    usage: number;
+  };
+  memory: {
+    usedPercentage: number;
+  };
+}
+
 const KarnaCore = () => {
-  const [cpuUsage, setCpuUsage] = useState(45);
-  const [memoryUsage, setMemoryUsage] = useState(32);
+  const [systemStats, setSystemStats] = useState<SystemStats | null>(null);
   const [processingStatus, setProcessingStatus] = useState('idle');
   const [isActive, setIsActive] = useState(true);
   const [learningProgress, setLearningProgress] = useState(0);
+  const [activeModules, setActiveModules] = useState({
+    selfLearning: false,
+    dataAnalysis: false,
+    nlp: false,
+    ollama: true,
+    gemini: true,
+    faceRecognition: false,
+    speechRecognition: false,
+    knowledgeDB: true,
+    humorModule: true
+  });
 
+  // Connect to system stats from Electron
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCpuUsage(prev => Math.min(Math.max(prev + Math.random() * 10 - 5, 5), 90));
-      setMemoryUsage(prev => Math.min(Math.max(prev + Math.random() * 8 - 4, 10), 80));
+    const unsubscribe = window.electron?.systemStats.subscribe((stats: SystemStats) => {
+      setSystemStats(stats);
+    });
+    
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, []);
+
+  // Simulate KARNA's internal processing
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    
+    const updateProcessingState = () => {
+      // Randomly change the processing status
+      const rand = Math.random();
       
-      const statuses = ['processing', 'learning', 'analyzing', 'idle'];
-      const randomIndex = Math.floor(Math.random() * statuses.length);
-      setProcessingStatus(statuses[randomIndex]);
-      
-      // Simulate learning progress
-      if (statuses[randomIndex] === 'learning') {
+      if (rand < 0.3) {
+        setProcessingStatus('idle');
+        setActiveModules(prev => ({
+          ...prev,
+          selfLearning: false,
+          dataAnalysis: false,
+          nlp: false
+        }));
+      } else if (rand < 0.5) {
+        setProcessingStatus('processing');
+        setActiveModules(prev => ({
+          ...prev,
+          selfLearning: false,
+          dataAnalysis: false,
+          nlp: true
+        }));
+      } else if (rand < 0.7) {
+        setProcessingStatus('analyzing');
+        setActiveModules(prev => ({
+          ...prev,
+          selfLearning: false,
+          dataAnalysis: true,
+          nlp: false
+        }));
+      } else {
+        setProcessingStatus('learning');
+        setActiveModules(prev => ({
+          ...prev,
+          selfLearning: true,
+          dataAnalysis: false,
+          nlp: false
+        }));
+        
+        // Update learning progress
         setLearningProgress(prev => (prev + Math.random() * 10) % 100);
       }
-    }, 3000);
-
-    return () => clearInterval(interval);
+      
+      // Periodically update face/speech recognition status
+      setActiveModules(prev => ({
+        ...prev,
+        faceRecognition: Math.random() > 0.5,
+        speechRecognition: Math.random() > 0.7
+      }));
+      
+      // Schedule next update
+      timer = setTimeout(updateProcessingState, 5000 + Math.random() * 5000);
+    };
+    
+    // Initial update
+    updateProcessingState();
+    
+    // Clean up
+    return () => {
+      clearTimeout(timer);
+    };
   }, []);
+
+  const handleAdvancedSettings = () => {
+    toast({
+      title: "Advanced Settings",
+      description: "KARNA's advanced settings interface will be available in a future update."
+    });
+  };
 
   return (
     <div className="glass-panel p-5 h-full flex flex-col">
@@ -45,11 +132,11 @@ const KarnaCore = () => {
         <div className="glass-panel p-3 flex flex-col items-center">
           <div className="w-16 h-16 mb-2">
             <CircularProgressbar 
-              value={cpuUsage} 
-              text={`${cpuUsage}%`}
+              value={systemStats?.cpu.usage || 0} 
+              text={`${Math.round(systemStats?.cpu.usage || 0)}%`}
               styles={buildStyles({
                 textSize: '25px',
-                pathColor: `rgba(10, 239, 255, ${cpuUsage / 100})`,
+                pathColor: `rgba(10, 239, 255, ${(systemStats?.cpu.usage || 0) / 100})`,
                 textColor: '#0AEFFF',
                 trailColor: '#1E2A3A',
               })}
@@ -67,12 +154,12 @@ const KarnaCore = () => {
         <div className="glass-panel p-3 flex flex-col items-center">
           <div className="w-16 h-16 mb-2">
             <CircularProgressbar 
-              value={memoryUsage} 
-              text={`${memoryUsage}%`}
+              value={systemStats?.memory.usedPercentage || 0} 
+              text={`${Math.round(systemStats?.memory.usedPercentage || 0)}%`}
               styles={buildStyles({
                 textSize: '25px',
-                pathColor: memoryUsage > 70 ? '#FF5757' : `rgba(10, 239, 255, ${memoryUsage / 100})`,
-                textColor: memoryUsage > 70 ? '#FF5757' : '#0AEFFF',
+                pathColor: (systemStats?.memory.usedPercentage || 0) > 70 ? '#FF5757' : `rgba(10, 239, 255, ${(systemStats?.memory.usedPercentage || 0) / 100})`,
+                textColor: (systemStats?.memory.usedPercentage || 0) > 70 ? '#FF5757' : '#0AEFFF',
                 trailColor: '#1E2A3A',
               })}
             />
@@ -81,7 +168,7 @@ const KarnaCore = () => {
             <div className="text-sm text-muted-foreground">Memory</div>
             <div className="flex items-center justify-center mt-1">
               <Database size={14} className="text-jarvis-blue mr-1" />
-              <span className="text-xs">{memoryUsage > 70 ? 'Warning' : 'Optimal'}</span>
+              <span className="text-xs">{(systemStats?.memory.usedPercentage || 0) > 70 ? 'Warning' : 'Optimal'}</span>
             </div>
           </div>
         </div>
@@ -120,19 +207,19 @@ const KarnaCore = () => {
           <Zap className="text-jarvis-blue mr-1" size={14} /> Active Processes
         </h3>
         <div className="space-y-2 text-xs">
-          {processingStatus === 'learning' && (
+          {activeModules.selfLearning && (
             <div className="flex justify-between items-center">
               <span>Self-Learning Module</span>
               <span className="text-jarvis-success">Active</span>
             </div>
           )}
-          {processingStatus === 'analyzing' && (
+          {activeModules.dataAnalysis && (
             <div className="flex justify-between items-center">
               <span>Data Analysis Engine</span>
               <span className="text-jarvis-blue">Running</span>
             </div>
           )}
-          {processingStatus === 'processing' && (
+          {activeModules.nlp && (
             <div className="flex justify-between items-center">
               <span>Natural Language Processing</span>
               <span className="text-jarvis-blue">Running</span>
@@ -148,11 +235,15 @@ const KarnaCore = () => {
           </div>
           <div className="flex justify-between items-center">
             <span>Facial Recognition</span>
-            <span className="text-jarvis-blue">Active</span>
+            <span className={activeModules.faceRecognition ? "text-jarvis-blue" : "text-muted-foreground"}>
+              {activeModules.faceRecognition ? 'Active' : 'Standby'}
+            </span>
           </div>
           <div className="flex justify-between items-center">
             <span>Speech Recognition</span>
-            <span className="text-jarvis-blue">Standby</span>
+            <span className={activeModules.speechRecognition ? "text-jarvis-blue" : "text-muted-foreground"}>
+              {activeModules.speechRecognition ? 'Active' : 'Standby'}
+            </span>
           </div>
           <div className="flex justify-between items-center">
             <span>Knowledge Database</span>
@@ -166,7 +257,10 @@ const KarnaCore = () => {
       </div>
       
       <div className="flex justify-end mt-3">
-        <button className="text-xs flex items-center text-muted-foreground hover:text-jarvis-blue transition-colors">
+        <button 
+          className="text-xs flex items-center text-muted-foreground hover:text-jarvis-blue transition-colors"
+          onClick={handleAdvancedSettings}
+        >
           <Settings size={12} className="mr-1" /> Advanced Settings
         </button>
       </div>

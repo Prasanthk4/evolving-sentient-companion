@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState } from 'react';
-import { Camera, User, CheckCircle, XCircle } from 'lucide-react';
+import { Camera, User, CheckCircle, XCircle, Shield } from 'lucide-react';
 import { 
   loadOwnerProfile, 
   updateFaceSignature, 
@@ -15,17 +15,16 @@ const FaceRecognition = () => {
   const [faceDetected, setFaceDetected] = useState(false);
   const [user, setUser] = useState<string | null>(null);
   const [confidence, setConfidence] = useState(0);
-  const [recognitionLog, setRecognitionLog] = useState<{time: string, text: string, isOwner: boolean}[]>([
-    {time: "10:42:15", text: "User recognized", isOwner: true},
-    {time: "10:35:22", text: "Unknown face detected", isOwner: false},
-    {time: "10:21:03", text: "User recognized", isOwner: true}
-  ]);
+  const [cameraPermission, setCameraPermission] = useState<'granted' | 'denied' | 'prompt'>('prompt');
+  const [recognitionLog, setRecognitionLog] = useState<{time: string, text: string, isOwner: boolean}[]>([]);
 
   useEffect(() => {
     let faceDetectionInterval: NodeJS.Timeout;
+    let mediaStream: MediaStream | null = null;
     
     const startCamera = async () => {
       try {
+        // Request camera permission
         const stream = await navigator.mediaDevices.getUserMedia({ 
           video: { 
             width: 300,
@@ -34,14 +33,20 @@ const FaceRecognition = () => {
           } 
         });
         
+        mediaStream = stream;
+        setCameraPermission('granted');
+        
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          
-          // Simulate face detection
           setIsDetecting(true);
+          
+          // Simulate face detection - in a real system this would use a face detection library
           faceDetectionInterval = setInterval(() => {
+            if (!canvasRef.current || !videoRef.current) return;
+            
             const randomValue = Math.random();
             if (randomValue > 0.3) {
+              // Face detected
               setFaceDetected(true);
               setConfidence(Math.floor(Math.random() * 30) + 70); // 70-99% confidence
               
@@ -94,34 +99,32 @@ const FaceRecognition = () => {
                 setUser(null);
               }
               
-              // Draw face box on canvas
-              if (canvasRef.current && videoRef.current) {
-                const context = canvasRef.current.getContext('2d');
-                if (context) {
-                  context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-                  
-                  // Draw face detection box
-                  const centerX = canvasRef.current.width / 2;
-                  const centerY = canvasRef.current.height / 2;
-                  const boxWidth = 100 + Math.random() * 20;
-                  const boxHeight = 100 + Math.random() * 20;
-                  
-                  context.beginPath();
-                  context.rect(
-                    centerX - boxWidth / 2, 
-                    centerY - boxHeight / 2, 
-                    boxWidth, 
-                    boxHeight
-                  );
-                  context.strokeStyle = user ? '#00FF9D' : '#0AEFFF';
-                  context.lineWidth = 2;
-                  context.stroke();
-                  
-                  // Add confidence text
-                  context.font = '10px Arial';
-                  context.fillStyle = '#0AEFFF';
-                  context.fillText(`${confidence}%`, centerX - boxWidth / 2, centerY - boxHeight / 2 - 5);
-                }
+              // Draw face box on canvas - in a real app this would use actual face coordinates
+              const context = canvasRef.current.getContext('2d');
+              if (context) {
+                context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                
+                // Draw face detection box
+                const centerX = canvasRef.current.width / 2;
+                const centerY = canvasRef.current.height / 2;
+                const boxWidth = 100 + Math.random() * 20;
+                const boxHeight = 100 + Math.random() * 20;
+                
+                context.beginPath();
+                context.rect(
+                  centerX - boxWidth / 2, 
+                  centerY - boxHeight / 2, 
+                  boxWidth, 
+                  boxHeight
+                );
+                context.strokeStyle = user ? '#00FF9D' : '#0AEFFF';
+                context.lineWidth = 2;
+                context.stroke();
+                
+                // Add confidence text
+                context.font = '10px Arial';
+                context.fillStyle = '#0AEFFF';
+                context.fillText(`${confidence}%`, centerX - boxWidth / 2, centerY - boxHeight / 2 - 5);
               }
             } else {
               // No face detected
@@ -129,17 +132,16 @@ const FaceRecognition = () => {
               setUser(null);
               
               // Clear canvas
-              if (canvasRef.current) {
-                const context = canvasRef.current.getContext('2d');
-                if (context) {
-                  context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-                }
+              const context = canvasRef.current.getContext('2d');
+              if (context) {
+                context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
               }
             }
           }, 1000);
         }
       } catch (error) {
         console.error('Error accessing camera:', error);
+        setCameraPermission('denied');
         setIsDetecting(false);
       }
     };
@@ -148,13 +150,25 @@ const FaceRecognition = () => {
     
     return () => {
       clearInterval(faceDetectionInterval);
-      if (videoRef.current?.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        const tracks = stream.getTracks();
-        tracks.forEach(track => track.stop());
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
       }
     };
   }, []);
+
+  const handleRequestCameraAccess = async () => {
+    try {
+      await navigator.mediaDevices.getUserMedia({ video: true });
+      window.location.reload(); // Refresh to restart camera initialization
+    } catch (error) {
+      console.error('Failed to get camera permission:', error);
+      toast({
+        title: "Camera Access Denied",
+        description: "Please allow camera access in your browser settings to enable facial recognition.",
+        variant: "destructive"
+      });
+    }
+  };
 
   return (
     <div className="glass-panel p-5 flex flex-col h-full">
@@ -183,9 +197,20 @@ const FaceRecognition = () => {
           className="absolute top-0 left-0 w-full h-full"
         />
         
-        {!isDetecting && (
-          <div className="absolute inset-0 flex items-center justify-center bg-jarvis-dark/80">
-            <p className="text-jarvis-blue text-sm">Camera not available</p>
+        {cameraPermission !== 'granted' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-jarvis-dark/80 p-4">
+            <Shield className="text-jarvis-accent mb-2" size={24} />
+            <p className="text-jarvis-blue text-sm text-center mb-3">
+              {cameraPermission === 'denied' 
+                ? "Camera access was denied" 
+                : "Camera access is required for facial recognition"}
+            </p>
+            <button
+              className="px-3 py-1.5 bg-jarvis-blue text-white text-xs rounded hover:bg-jarvis-blue-light transition-colors"
+              onClick={handleRequestCameraAccess}
+            >
+              Grant Camera Access
+            </button>
           </div>
         )}
       </div>
@@ -221,27 +246,23 @@ const FaceRecognition = () => {
       <div className="glass-panel p-3 flex-1">
         <h3 className="text-sm font-medium mb-2">Recognition Log</h3>
         <div className="space-y-2 text-xs max-h-24 overflow-y-auto">
-          {faceDetected && recognitionLog.length > 0 && recognitionLog[0].time !== new Date().toLocaleTimeString() && (
-            <>
-              <div className="flex justify-between items-center">
-                <span className="text-jarvis-blue">{new Date().toLocaleTimeString()}</span>
-                <span>{user ? `${user} recognized` : 'Unknown face detected'}</span>
-              </div>
-              <div className="h-px bg-jarvis-dark"></div>
-            </>
+          {recognitionLog.length === 0 ? (
+            <div className="text-center text-muted-foreground py-2">
+              No recognition events recorded
+            </div>
+          ) : (
+            recognitionLog.map((log, index) => (
+              <React.Fragment key={index}>
+                <div className={`flex justify-between items-center ${index > 0 ? 'opacity-' + (70 - index * 10) : ''}`}>
+                  <span className="text-jarvis-blue">{log.time}</span>
+                  <span>{log.text}</span>
+                </div>
+                {index < recognitionLog.length - 1 && (
+                  <div className="h-px bg-jarvis-dark"></div>
+                )}
+              </React.Fragment>
+            ))
           )}
-          
-          {recognitionLog.map((log, index) => (
-            <React.Fragment key={index}>
-              <div className={`flex justify-between items-center ${index > 0 ? 'opacity-' + (70 - index * 10) : ''}`}>
-                <span className="text-jarvis-blue">{log.time}</span>
-                <span>{log.text}</span>
-              </div>
-              {index < recognitionLog.length - 1 && (
-                <div className="h-px bg-jarvis-dark"></div>
-              )}
-            </React.Fragment>
-          ))}
         </div>
       </div>
     </div>
