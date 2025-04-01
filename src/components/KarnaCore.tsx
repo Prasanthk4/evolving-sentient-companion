@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Brain, Cpu, Activity, Database, Zap, Settings, Lightbulb } from 'lucide-react';
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
-import { toast } from '@/components/ui/use-toast';
+import { toast } from '@/hooks/use-toast';
 import 'react-circular-progressbar/dist/styles.css';
 
 interface SystemStats {
@@ -31,6 +31,18 @@ const KarnaCore = () => {
     humorModule: true
   });
 
+  // Use refs to prevent circular updates
+  const processingStatusRef = useRef(processingStatus);
+  const activeModulesRef = useRef(activeModules);
+  
+  useEffect(() => {
+    processingStatusRef.current = processingStatus;
+  }, [processingStatus]);
+  
+  useEffect(() => {
+    activeModulesRef.current = activeModules;
+  }, [activeModules]);
+
   // Connect to system stats from Electron
   useEffect(() => {
     const unsubscribe = window.electron?.systemStats.subscribe((stats: SystemStats) => {
@@ -44,21 +56,19 @@ const KarnaCore = () => {
     };
   }, []);
 
+  // Broadcast status changes to other components
+  const broadcastStatus = () => {
+    const statusEvent = new CustomEvent('karna-status-update', {
+      detail: {
+        processingStatus: processingStatusRef.current,
+        activeModules: activeModulesRef.current
+      }
+    });
+    window.dispatchEvent(statusEvent);
+  };
+
   // Update system status and broadcast to other components
   useEffect(() => {
-    // Broadcast status changes to other components
-    const broadcastStatus = () => {
-      const statusEvent = new CustomEvent('karna-status-update', {
-        detail: {
-          processingStatus,
-          activeModules
-        }
-      });
-      window.dispatchEvent(statusEvent);
-    };
-
-    broadcastStatus();
-    
     let timer: NodeJS.Timeout;
     
     const updateProcessingState = () => {
@@ -68,53 +78,56 @@ const KarnaCore = () => {
       
       // Determine processing status based on system load
       let newStatus = 'idle';
+      let newActiveModules = { ...activeModulesRef.current };
       
       if (cpuUsage > 70 || memoryUsage > 80) {
         newStatus = 'processing';
-        setActiveModules(prev => ({
-          ...prev,
+        newActiveModules = {
+          ...newActiveModules,
           selfLearning: false,
           dataAnalysis: false,
           nlp: true
-        }));
+        };
       } else if (cpuUsage > 40 || memoryUsage > 60) {
         newStatus = 'analyzing';
-        setActiveModules(prev => ({
-          ...prev,
+        newActiveModules = {
+          ...newActiveModules,
           selfLearning: false,
           dataAnalysis: true,
           nlp: false
-        }));
+        };
       } else if (Math.random() > 0.6) { // Sometimes go into learning mode
         newStatus = 'learning';
-        setActiveModules(prev => ({
-          ...prev,
+        newActiveModules = {
+          ...newActiveModules,
           selfLearning: true,
           dataAnalysis: false,
           nlp: false
-        }));
+        };
         
         // Update learning progress
         setLearningProgress(prev => (prev + Math.random() * 10) % 100);
       } else {
-        setActiveModules(prev => ({
-          ...prev,
+        newActiveModules = {
+          ...newActiveModules,
           selfLearning: false,
           dataAnalysis: false,
           nlp: false
-        }));
+        };
       }
       
       setProcessingStatus(newStatus);
       
       // Periodically update face/speech recognition status based on actual system state
-      setActiveModules(prev => ({
-        ...prev,
+      newActiveModules = {
+        ...newActiveModules,
         faceRecognition: document.querySelector('video')?.srcObject !== null,
         speechRecognition: Math.random() > 0.7
-      }));
+      };
       
-      // Broadcast the updated status
+      setActiveModules(newActiveModules);
+      
+      // Broadcast the updated status - after state updates are scheduled
       setTimeout(broadcastStatus, 100);
       
       // Schedule next update
@@ -128,7 +141,7 @@ const KarnaCore = () => {
     return () => {
       clearTimeout(timer);
     };
-  }, [systemStats, processingStatus, activeModules]);
+  }, [systemStats]); // Only depend on systemStats
 
   const handleAdvancedSettings = () => {
     toast({

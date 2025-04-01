@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { Network, Brain, Database, Heart, Lightbulb, AlertCircle } from 'lucide-react';
 
 const agents = [
@@ -61,62 +62,75 @@ const MultiAgentSystem = () => {
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [systemMessages, setSystemMessages] = useState<string[]>([]);
   
+  // Use refs to prevent infinite update loops
+  const activeAgentsRef = useRef(activeAgents);
+  const systemStatusRef = useRef(systemStatus);
+  
+  useEffect(() => {
+    activeAgentsRef.current = activeAgents;
+  }, [activeAgents]);
+  
+  useEffect(() => {
+    systemStatusRef.current = systemStatus;
+  }, [systemStatus]);
+  
   useEffect(() => {
     // Listen for system status updates from main process
-    const statusChannel = (status: SystemStatus) => {
-      setSystemStatus(status);
-      
-      // Update active agents based on processing status
-      const newActiveAgents = ['thinker'];
-      
-      if (status.processingStatus === 'analyzing' || status.processingStatus === 'learning') {
-        newActiveAgents.push('critic');
-      }
-      
-      if (status.activeModules.knowledgeDB) {
-        newActiveAgents.push('memory');
-      }
-      
-      if (status.activeModules.humorModule) {
-        newActiveAgents.push('personality');
-      }
-      
-      if (status.processingStatus === 'learning') {
-        newActiveAgents.push('creative');
-      }
-      
-      // Only update if the active agents have changed
-      if (JSON.stringify(newActiveAgents.sort()) !== JSON.stringify([...activeAgents].sort())) {
-        setActiveAgents(newActiveAgents);
+    const handleStatusUpdate = (event: CustomEvent) => {
+      if (event.detail) {
+        const status = event.detail as SystemStatus;
+        setSystemStatus(status);
         
-        // Add a system message about agent changes
-        const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
-        if (newActiveAgents.length > activeAgents.length) {
-          const newAgents = newActiveAgents.filter(a => !activeAgents.includes(a));
-          newAgents.forEach(agentId => {
-            const agent = agents.find(a => a.id === agentId);
-            if (agent) {
-              addSystemMessage(`${timeString}: ${agent.name} activated`);
-            }
-          });
-        } else if (newActiveAgents.length < activeAgents.length) {
-          const removedAgents = activeAgents.filter(a => !newActiveAgents.includes(a));
-          removedAgents.forEach(agentId => {
-            const agent = agents.find(a => a.id === agentId);
-            if (agent) {
-              addSystemMessage(`${timeString}: ${agent.name} deactivated`);
-            }
-          });
+        // Update active agents based on processing status
+        const newActiveAgents = ['thinker'];
+        
+        if (status.processingStatus === 'analyzing' || status.processingStatus === 'learning') {
+          newActiveAgents.push('critic');
+        }
+        
+        if (status.activeModules.knowledgeDB) {
+          newActiveAgents.push('memory');
+        }
+        
+        if (status.activeModules.humorModule) {
+          newActiveAgents.push('personality');
+        }
+        
+        if (status.processingStatus === 'learning') {
+          newActiveAgents.push('creative');
+        }
+        
+        // Only update if the active agents have changed
+        const currentActiveAgents = activeAgentsRef.current;
+        if (JSON.stringify(newActiveAgents.sort()) !== JSON.stringify([...currentActiveAgents].sort())) {
+          setActiveAgents(newActiveAgents);
+          
+          // Add a system message about agent changes
+          const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+          if (newActiveAgents.length > currentActiveAgents.length) {
+            const newAgents = newActiveAgents.filter(a => !currentActiveAgents.includes(a));
+            newAgents.forEach(agentId => {
+              const agent = agents.find(a => a.id === agentId);
+              if (agent) {
+                addSystemMessage(`${timeString}: ${agent.name} activated`);
+              }
+            });
+          } else if (newActiveAgents.length < currentActiveAgents.length) {
+            const removedAgents = currentActiveAgents.filter(a => !newActiveAgents.includes(a));
+            removedAgents.forEach(agentId => {
+              const agent = agents.find(a => a.id === agentId);
+              if (agent) {
+                addSystemMessage(`${timeString}: ${agent.name} deactivated`);
+              }
+            });
+          }
         }
       }
     };
     
-    // Subscribe to system status from KarnaCore
-    const subscription = window.addEventListener('karna-status-update', (event: any) => {
-      if (event.detail) {
-        statusChannel(event.detail);
-      }
-    });
+    // Type assertion for the custom event
+    window.addEventListener('karna-status-update', 
+      handleStatusUpdate as EventListener);
     
     // Generate initial links
     generateLinks();
@@ -130,14 +144,11 @@ const MultiAgentSystem = () => {
     }, 5000);
     
     return () => {
-      window.removeEventListener('karna-status-update', (event: any) => {
-        if (event.detail) {
-          statusChannel(event.detail);
-        }
-      });
+      window.removeEventListener('karna-status-update', 
+        handleStatusUpdate as EventListener);
       clearInterval(interval);
     };
-  }, [activeAgents]);
+  }, []); // Empty dependency array to run only once
   
   // Add a system message with timestamp
   const addSystemMessage = (message: string) => {
@@ -151,9 +162,10 @@ const MultiAgentSystem = () => {
   // Generate links between active agents
   const generateLinks = () => {
     const newLinks: {source: string, target: string, strength: number}[] = [];
+    const currentActiveAgents = activeAgentsRef.current;
     
     // Always connect thinker to active agents
-    activeAgents.forEach(agent => {
+    currentActiveAgents.forEach(agent => {
       if (agent !== 'thinker') {
         newLinks.push({
           source: 'thinker',
@@ -164,12 +176,12 @@ const MultiAgentSystem = () => {
     });
     
     // Add some random connections
-    for (let i = 0; i < activeAgents.length; i++) {
-      for (let j = i + 1; j < activeAgents.length; j++) {
+    for (let i = 0; i < currentActiveAgents.length; i++) {
+      for (let j = i + 1; j < currentActiveAgents.length; j++) {
         if (Math.random() > 0.3) { // 70% chance to create a link
           newLinks.push({
-            source: activeAgents[i],
-            target: activeAgents[j],
+            source: currentActiveAgents[i],
+            target: currentActiveAgents[j],
             strength: Math.random() * 0.7 + 0.3, // 0.3 to 1
           });
         }
@@ -186,17 +198,19 @@ const MultiAgentSystem = () => {
     const timeString = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
     const agent = agents.find(a => a.id === agentId);
     
-    if (activeAgents.includes(agentId)) {
-      setActiveAgents(prev => prev.filter(a => a !== agentId));
-      if (agent) {
-        addSystemMessage(`${timeString}: ${agent.name} deactivated by user`);
+    setActiveAgents(prev => {
+      if (prev.includes(agentId)) {
+        if (agent) {
+          addSystemMessage(`${timeString}: ${agent.name} deactivated by user`);
+        }
+        return prev.filter(a => a !== agentId);
+      } else {
+        if (agent) {
+          addSystemMessage(`${timeString}: ${agent.name} activated by user`);
+        }
+        return [...prev, agentId];
       }
-    } else {
-      setActiveAgents(prev => [...prev, agentId]);
-      if (agent) {
-        addSystemMessage(`${timeString}: ${agent.name} activated by user`);
-      }
-    }
+    });
     
     // Generate new links for the updated agents
     setTimeout(generateLinks, 100);
@@ -317,7 +331,7 @@ const MultiAgentSystem = () => {
       </div>
       
       {/* Status messages */}
-      <div className="glass-panel p-3 mt-4 max-h-32 overflow-y-auto">
+      <div className="glass-panel p-3 mt-4 h-32 overflow-y-auto">
         <h3 className="text-sm font-medium mb-2">System Messages</h3>
         <div className="space-y-2 text-xs">
           <div className="text-jarvis-blue text-xs">
