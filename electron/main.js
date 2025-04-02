@@ -1,11 +1,11 @@
-
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen } = require('electron');
 const path = require('path');
 const isDev = require('electron-is-dev');
 const os = require('os');
 const osUtils = require('node-os-utils');
 const fs = require('fs');
 const fetch = require('node-fetch');
+const { exec } = require('child_process');
 
 let mainWindow;
 const userDataPath = app.getPath('userData');
@@ -264,6 +264,228 @@ ipcMain.on('gemini-query', async (event, { id, prompt }) => {
     console.error('Error querying Gemini:', error);
     event.sender.send('gemini-response', {
       id,
+      error: error.message
+    });
+  }
+});
+
+// Desktop automation handlers
+ipcMain.on('open-browser', (event, { browserName, url }) => {
+  console.log(`Opening browser: ${browserName} with URL: ${url || 'default'}`);
+  
+  let openCommand;
+  const searchUrl = url ? `https://www.google.com/search?q=${encodeURIComponent(url)}` : '';
+  
+  try {
+    // Platform-specific browser opening
+    switch (process.platform) {
+      case 'win32':
+        if (browserName === 'chrome') {
+          openCommand = `start chrome ${searchUrl}`;
+        } else if (browserName === 'firefox') {
+          openCommand = `start firefox ${searchUrl}`;
+        } else if (browserName === 'edge') {
+          openCommand = `start msedge ${searchUrl}`;
+        } else {
+          // Default to system default browser
+          shell.openExternal(searchUrl || 'https://www.google.com');
+          event.reply('automation-response', { success: true, action: 'open-browser' });
+          return;
+        }
+        break;
+        
+      case 'darwin': // macOS
+        if (browserName === 'chrome') {
+          openCommand = `open -a "Google Chrome" ${searchUrl || ''}`;
+        } else if (browserName === 'firefox') {
+          openCommand = `open -a "Firefox" ${searchUrl || ''}`;
+        } else if (browserName === 'safari') {
+          openCommand = `open -a "Safari" ${searchUrl || ''}`;
+        } else {
+          // Default to system default browser
+          shell.openExternal(searchUrl || 'https://www.google.com');
+          event.reply('automation-response', { success: true, action: 'open-browser' });
+          return;
+        }
+        break;
+        
+      case 'linux':
+        if (browserName === 'chrome') {
+          openCommand = `google-chrome ${searchUrl}`;
+        } else if (browserName === 'firefox') {
+          openCommand = `firefox ${searchUrl}`;
+        } else {
+          // Default to system default browser
+          shell.openExternal(searchUrl || 'https://www.google.com');
+          event.reply('automation-response', { success: true, action: 'open-browser' });
+          return;
+        }
+        break;
+        
+      default:
+        // Use shell.openExternal as fallback
+        shell.openExternal(searchUrl || 'https://www.google.com');
+        event.reply('automation-response', { success: true, action: 'open-browser' });
+        return;
+    }
+    
+    if (openCommand) {
+      exec(openCommand, (error) => {
+        if (error) {
+          console.error('Error opening browser:', error);
+          event.reply('automation-response', { 
+            success: false, 
+            action: 'open-browser',
+            error: error.message
+          });
+        } else {
+          event.reply('automation-response', { success: true, action: 'open-browser' });
+        }
+      });
+    }
+  } catch (error) {
+    console.error('Error in open-browser handler:', error);
+    event.reply('automation-response', { 
+      success: false, 
+      action: 'open-browser',
+      error: error.message
+    });
+  }
+});
+
+ipcMain.on('web-search', (event, { query }) => {
+  console.log(`Performing web search for: ${query}`);
+  
+  try {
+    // Encode the query for use in a URL
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+    
+    // Open the search URL in the default browser
+    shell.openExternal(searchUrl);
+    
+    event.reply('automation-response', { success: true, action: 'web-search' });
+  } catch (error) {
+    console.error('Error in web-search handler:', error);
+    event.reply('automation-response', { 
+      success: false, 
+      action: 'web-search',
+      error: error.message
+    });
+  }
+});
+
+ipcMain.on('open-application', (event, { appName }) => {
+  console.log(`Opening application: ${appName}`);
+  
+  let openCommand;
+  
+  try {
+    // Platform-specific application opening
+    switch (process.platform) {
+      case 'win32':
+        openCommand = `start ${appName}`;
+        break;
+        
+      case 'darwin': // macOS
+        openCommand = `open -a "${appName}"`;
+        break;
+        
+      case 'linux':
+        openCommand = `${appName}`;
+        break;
+        
+      default:
+        event.reply('automation-response', { 
+          success: false, 
+          action: 'open-application',
+          error: 'Unsupported platform'
+        });
+        return;
+    }
+    
+    exec(openCommand, (error) => {
+      if (error) {
+        console.error('Error opening application:', error);
+        event.reply('automation-response', { 
+          success: false, 
+          action: 'open-application',
+          error: error.message
+        });
+      } else {
+        event.reply('automation-response', { success: true, action: 'open-application' });
+      }
+    });
+  } catch (error) {
+    console.error('Error in open-application handler:', error);
+    event.reply('automation-response', { 
+      success: false, 
+      action: 'open-application',
+      error: error.message
+    });
+  }
+});
+
+ipcMain.on('take-screenshot', (event) => {
+  console.log('Taking screenshot');
+  
+  try {
+    // Get the primary display
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width, height } = primaryDisplay.size;
+    
+    // Capture screenshot
+    mainWindow.webContents.capturePage({
+      x: 0,
+      y: 0,
+      width,
+      height
+    }).then(image => {
+      // Save the screenshot to the user's pictures directory
+      const screenshotsDir = path.join(app.getPath('pictures'), 'KARNA-Screenshots');
+      
+      // Create directory if it doesn't exist
+      if (!fs.existsSync(screenshotsDir)) {
+        fs.mkdirSync(screenshotsDir, { recursive: true });
+      }
+      
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
+      const filePath = path.join(screenshotsDir, `screenshot-${timestamp}.png`);
+      
+      // Write the image to disk
+      fs.writeFile(filePath, image.toPNG(), (err) => {
+        if (err) {
+          console.error('Error saving screenshot:', err);
+          event.reply('automation-response', { 
+            success: false, 
+            action: 'take-screenshot',
+            error: err.message
+          });
+        } else {
+          console.log('Screenshot saved to:', filePath);
+          event.reply('automation-response', { 
+            success: true, 
+            action: 'take-screenshot',
+            path: filePath
+          });
+          
+          // Open the folder containing the screenshot
+          shell.showItemInFolder(filePath);
+        }
+      });
+    }).catch(err => {
+      console.error('Error capturing screenshot:', err);
+      event.reply('automation-response', { 
+        success: false, 
+        action: 'take-screenshot',
+        error: err.message
+      });
+    });
+  } catch (error) {
+    console.error('Error in take-screenshot handler:', error);
+    event.reply('automation-response', { 
+      success: false, 
+      action: 'take-screenshot',
       error: error.message
     });
   }
