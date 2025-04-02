@@ -40,12 +40,10 @@ contextBridge.exposeInMainWorld('electron', {
     }
   },
   ollama: {
-    query: (prompt, model) => {
+    query: (request) => {
       return new Promise((resolve, reject) => {
-        const requestId = Date.now().toString();
-        
         const responseHandler = (event, { id, response, error }) => {
-          if (id === requestId) {
+          if (id === request.id) {
             ipcRenderer.removeListener('ollama-response', responseHandler);
             if (error) {
               reject(error);
@@ -56,17 +54,21 @@ contextBridge.exposeInMainWorld('electron', {
         };
         
         ipcRenderer.on('ollama-response', responseHandler);
-        ipcRenderer.send('ollama-query', { id: requestId, prompt, model });
+        ipcRenderer.send('ollama-query', request);
       });
+    },
+    on: (channel, callback) => {
+      ipcRenderer.on(channel, callback);
+    },
+    off: (channel, callback) => {
+      ipcRenderer.removeListener(channel, callback);
     }
   },
   gemini: {
-    query: (prompt) => {
+    query: (request) => {
       return new Promise((resolve, reject) => {
-        const requestId = Date.now().toString();
-        
         const responseHandler = (event, { id, response, error }) => {
-          if (id === requestId) {
+          if (id === request.id) {
             ipcRenderer.removeListener('gemini-response', responseHandler);
             if (error) {
               reject(error);
@@ -77,8 +79,14 @@ contextBridge.exposeInMainWorld('electron', {
         };
         
         ipcRenderer.on('gemini-response', responseHandler);
-        ipcRenderer.send('gemini-query', { id: requestId, prompt });
+        ipcRenderer.send('gemini-query', request);
       });
+    },
+    on: (channel, callback) => {
+      ipcRenderer.on(channel, callback);
+    },
+    off: (channel, callback) => {
+      ipcRenderer.removeListener(channel, callback);
     }
   }
 });

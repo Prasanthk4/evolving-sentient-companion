@@ -1,4 +1,3 @@
-
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const isDev = require('electron-is-dev');
@@ -10,6 +9,7 @@ const fetch = require('node-fetch');
 let mainWindow;
 const userDataPath = app.getPath('userData');
 const memoryFilePath = path.join(userDataPath, 'karna-memory.json');
+const modelsPath = path.join(userDataPath, 'models');
 
 // Configuration for LLM services
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434/api';
@@ -78,6 +78,20 @@ function setupSystemMonitoring() {
     }
   }, 2000);
 }
+
+// Handle creating directories for face-api models
+ipcMain.on('create-directory', (event, dirPath) => {
+  const fullPath = path.join(userDataPath, dirPath);
+  
+  if (!fs.existsSync(fullPath)) {
+    try {
+      fs.mkdirSync(fullPath, { recursive: true });
+      console.log(`Directory created: ${fullPath}`);
+    } catch (error) {
+      console.error(`Error creating directory ${fullPath}:`, error);
+    }
+  }
+});
 
 // Handle IPC messages from renderer
 ipcMain.on('speak-text', (event, text) => {

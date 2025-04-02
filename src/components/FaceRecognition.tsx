@@ -1,6 +1,7 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { Camera, User, CheckCircle, XCircle, Shield } from 'lucide-react';
+import * as faceapi from 'face-api.js';
 import { 
   loadOwnerProfile, 
   updateFaceSignature, 
@@ -17,6 +18,46 @@ const FaceRecognition = () => {
   const [confidence, setConfidence] = useState(0);
   const [cameraPermission, setCameraPermission] = useState<'granted' | 'denied' | 'prompt'>('prompt');
   const [recognitionLog, setRecognitionLog] = useState<{time: string, text: string, isOwner: boolean}[]>([]);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [faceDescriptor, setFaceDescriptor] = useState<Float32Array | null>(null);
+
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        // Load face-api models
+        await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+        await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
+        await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
+        await faceapi.nets.faceExpressionNet.loadFromUri('/models');
+        
+        setModelsLoaded(true);
+        console.log('Face API models loaded successfully');
+        
+        // Create the models directory if it doesn't exist
+        const modelsDir = '/models';
+        if (window.electron) {
+          window.electron.sendMessage('create-directory', modelsDir);
+        }
+      } catch (error) {
+        console.error('Error loading face-api models:', error);
+        toast({
+          title: "Face Recognition Error",
+          description: "Failed to load facial recognition models. Some features may be limited.",
+          variant: "destructive"
+        });
+      }
+    };
+
+    loadModels();
+
+    return () => {
+      // Clean up resources when component unmounts
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let faceDetectionInterval: NodeJS.Timeout;
@@ -40,104 +81,10 @@ const FaceRecognition = () => {
           videoRef.current.srcObject = stream;
           setIsDetecting(true);
           
-          // Simulate face detection - in a real system this would use a face detection library
-          faceDetectionInterval = setInterval(() => {
-            if (!canvasRef.current || !videoRef.current) return;
-            
-            const randomValue = Math.random();
-            if (randomValue > 0.3) {
-              // Face detected
-              setFaceDetected(true);
-              setConfidence(Math.floor(Math.random() * 30) + 70); // 70-99% confidence
-              
-              const ownerProfile = loadOwnerProfile();
-              
-              // Check if we have an owner profile
-              if (ownerProfile) {
-                // Simulate face recognition match with higher probability
-                const isOwner = randomValue > 0.4;
-                
-                if (isOwner) {
-                  setUser(ownerProfile.name);
-                  
-                  // Add log entry if not too many already
-                  if (recognitionLog.length === 0 || 
-                      recognitionLog[0].text !== `${ownerProfile.name} recognized`) {
-                    const now = new Date();
-                    setRecognitionLog(prev => [{
-                      time: now.toLocaleTimeString(),
-                      text: `${ownerProfile.name} recognized`,
-                      isOwner: true
-                    }, ...prev.slice(0, 9)]);
-                  }
-                  
-                  // First time recognition, store face data
-                  if (!ownerProfile.faceSignature) {
-                    // This is simplified for demo, would actually capture facial features
-                    updateFaceSignature(Date.now().toString());
-                    toast({
-                      title: "Face Recognition Set",
-                      description: `I've saved your face signature, ${ownerProfile.name}.`
-                    });
-                  }
-                } else {
-                  setUser(null);
-                  
-                  // Add log entry if not too many already
-                  if (recognitionLog.length === 0 || 
-                      recognitionLog[0].text !== "Unknown face detected") {
-                    const now = new Date();
-                    setRecognitionLog(prev => [{
-                      time: now.toLocaleTimeString(),
-                      text: "Unknown face detected",
-                      isOwner: false
-                    }, ...prev.slice(0, 9)]);
-                  }
-                }
-              } else {
-                // No owner profile yet
-                setUser(null);
-              }
-              
-              // Draw face box on canvas - in a real app this would use actual face coordinates
-              const context = canvasRef.current.getContext('2d');
-              if (context) {
-                context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-                
-                // Draw face detection box
-                const centerX = canvasRef.current.width / 2;
-                const centerY = canvasRef.current.height / 2;
-                const boxWidth = 100 + Math.random() * 20;
-                const boxHeight = 100 + Math.random() * 20;
-                
-                context.beginPath();
-                context.rect(
-                  centerX - boxWidth / 2, 
-                  centerY - boxHeight / 2, 
-                  boxWidth, 
-                  boxHeight
-                );
-                context.strokeStyle = user ? '#00FF9D' : '#0AEFFF';
-                context.lineWidth = 2;
-                context.stroke();
-                
-                // Add confidence text
-                context.font = '10px Arial';
-                context.fillStyle = '#0AEFFF';
-                context.fillText(`${confidence}%`, centerX - boxWidth / 2, centerY - boxHeight / 2 - 5);
-              }
-            } else {
-              // No face detected
-              setFaceDetected(false);
-              setUser(null);
-              
-              // Clear canvas
-              const context = canvasRef.current.getContext('2d');
-              if (context) {
-                context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-              }
-            }
-          }, 1000);
+          if (modelsLoaded) {
+            // Start real face detection once models are loaded and camera is ready
+            faceDetectionInterval = setInterval(detectFaces, 1000);
+          }
         }
       } catch (error) {
         console.error('Error accessing camera:', error);
@@ -146,7 +93,9 @@ const FaceRecognition = () => {
       }
     };
     
-    startCamera();
+    if (modelsLoaded) {
+      startCamera();
+    }
     
     return () => {
       clearInterval(faceDetectionInterval);
@@ -154,7 +103,156 @@ const FaceRecognition = () => {
         mediaStream.getTracks().forEach(track => track.stop());
       }
     };
-  }, []);
+  }, [modelsLoaded]);
+
+  const detectFaces = async () => {
+    if (!videoRef.current || !canvasRef.current || !modelsLoaded) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    
+    // Make sure video is playing
+    if (video.paused || video.ended || !video.readyState) return;
+    
+    // Configure options for the detector
+    const options = new faceapi.TinyFaceDetectorOptions({
+      inputSize: 160,
+      scoreThreshold: 0.5
+    });
+
+    try {
+      // Detect face with landmarks and expressions
+      const detections = await faceapi.detectAllFaces(video, options)
+        .withFaceLandmarks()
+        .withFaceExpressions()
+        .withFaceDescriptors();
+      
+      // Clear previous drawings
+      const context = canvas.getContext('2d');
+      if (context) context.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Adjust canvas dimensions to match video
+      const displaySize = { width: video.width, height: video.height };
+      faceapi.matchDimensions(canvas, displaySize);
+      
+      // Resize detections to match display size
+      const resizedDetections = faceapi.resizeResults(detections, displaySize);
+      
+      if (resizedDetections.length > 0) {
+        setFaceDetected(true);
+        
+        // Get the first detected face
+        const detection = resizedDetections[0];
+        const descriptor = detection.descriptor;
+        
+        // Draw detections on canvas
+        faceapi.draw.drawDetections(canvas, [detection]);
+        faceapi.draw.drawFaceLandmarks(canvas, [detection]);
+        
+        // Calculate a real confidence score
+        const faceScore = Math.round(detection.detection.score * 100);
+        setConfidence(faceScore);
+        
+        // Check if we have owner data to recognize
+        const ownerProfile = loadOwnerProfile();
+        
+        if (ownerProfile) {
+          if (ownerProfile.faceSignature) {
+            // If we have a stored face signature, compare with current detection
+            const storedFaceDescriptor = Float32Array.from(
+              Object.values(JSON.parse(ownerProfile.faceSignature))
+            );
+            
+            // Calculate Euclidean distance (lower means more similar)
+            // A threshold of 0.6 is common for face recognition
+            const distance = faceapi.euclideanDistance(descriptor, storedFaceDescriptor);
+            const isMatch = distance < 0.6; // Below 0.6 is usually considered a match
+            
+            if (isMatch) {
+              setUser(ownerProfile.name);
+              
+              // Add log entry if not too many already
+              if (recognitionLog.length === 0 || 
+                  recognitionLog[0].text !== `${ownerProfile.name} recognized`) {
+                const now = new Date();
+                setRecognitionLog(prev => [{
+                  time: now.toLocaleTimeString(),
+                  text: `${ownerProfile.name} recognized (distance: ${distance.toFixed(2)})`,
+                  isOwner: true
+                }, ...prev.slice(0, 9)]);
+              }
+            } else {
+              setUser(null);
+              
+              // Add log entry for unknown face
+              if (recognitionLog.length === 0 || 
+                  recognitionLog[0].text !== "Unknown face detected") {
+                const now = new Date();
+                setRecognitionLog(prev => [{
+                  time: now.toLocaleTimeString(),
+                  text: `Unknown face detected (distance: ${distance.toFixed(2)})`,
+                  isOwner: false
+                }, ...prev.slice(0, 9)]);
+              }
+            }
+          } else {
+            // First time seeing owner's face, ask to register
+            setUser(null);
+            setFaceDescriptor(descriptor);
+            
+            // Add registration suggestion to log
+            if (recognitionLog.length === 0 || 
+                recognitionLog[0].text !== "Face detected - register as owner?") {
+              const now = new Date();
+              setRecognitionLog(prev => [{
+                time: now.toLocaleTimeString(),
+                text: "Face detected - register as owner?",
+                isOwner: false
+              }, ...prev.slice(0, 9)]);
+            }
+          }
+        } else {
+          // No owner profile yet
+          setUser(null);
+          setFaceDescriptor(descriptor);
+        }
+      } else {
+        // No face detected
+        setFaceDetected(false);
+        setUser(null);
+        setFaceDescriptor(null);
+        
+        // Clear canvas
+        const context = canvas.getContext('2d');
+        if (context) context.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    } catch (error) {
+      console.error('Error in face detection:', error);
+    }
+  };
+
+  const handleSaveFace = () => {
+    if (!faceDescriptor) return;
+    
+    const ownerProfile = loadOwnerProfile();
+    if (ownerProfile) {
+      // Save the face descriptor as a string
+      updateFaceSignature(JSON.stringify(Array.from(faceDescriptor)));
+      
+      toast({
+        title: "Face Recognition Set",
+        description: `I've saved your face signature, ${ownerProfile.name}.`
+      });
+      
+      // Update UI to show registered status
+      setUser(ownerProfile.name);
+    } else {
+      toast({
+        title: "Owner Profile Missing",
+        description: "Please set up your profile by voice command first. Say 'My name is [your name]'."
+      });
+    }
+  };
 
   const handleRequestCameraAccess = async () => {
     try {
@@ -178,7 +276,9 @@ const FaceRecognition = () => {
         </h2>
         <div className="flex items-center">
           <div className={`w-3 h-3 rounded-full mr-1 ${isDetecting ? 'bg-jarvis-blue animate-pulse' : 'bg-jarvis-accent'}`}></div>
-          <span className="text-sm text-muted-foreground">{isDetecting ? 'Active' : 'Inactive'}</span>
+          <span className="text-sm text-muted-foreground">
+            {!modelsLoaded ? 'Loading models...' : isDetecting ? 'Active' : 'Inactive'}
+          </span>
         </div>
       </div>
       
@@ -236,7 +336,14 @@ const FaceRecognition = () => {
               {user ? (
                 <CheckCircle size={18} className="text-jarvis-success" />
               ) : (
-                <XCircle size={18} className="text-jarvis-accent" />
+                faceDescriptor && (
+                  <button
+                    onClick={handleSaveFace}
+                    className="text-xs bg-jarvis-blue hover:bg-jarvis-blue-light text-white px-2 py-1 rounded transition-colors"
+                  >
+                    Register Face
+                  </button>
+                )
               )}
             </div>
           </div>
