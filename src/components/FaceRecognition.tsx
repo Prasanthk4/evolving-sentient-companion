@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import { Camera, User, CheckCircle, XCircle, Shield } from 'lucide-react';
 import * as faceapi from 'face-api.js';
@@ -24,20 +23,17 @@ const FaceRecognition = () => {
   useEffect(() => {
     const loadModels = async () => {
       try {
+        // Make sure to use the correct path for loading models
+        const modelPath = '/models';
+        
         // Load face-api models
-        await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
-        await faceapi.nets.faceLandmark68Net.loadFromUri('/models');
-        await faceapi.nets.faceRecognitionNet.loadFromUri('/models');
-        await faceapi.nets.faceExpressionNet.loadFromUri('/models');
+        await faceapi.nets.tinyFaceDetector.loadFromUri(modelPath);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(modelPath);
+        await faceapi.nets.faceRecognitionNet.loadFromUri(modelPath);
+        await faceapi.nets.faceExpressionNet.loadFromUri(modelPath);
         
         setModelsLoaded(true);
         console.log('Face API models loaded successfully');
-        
-        // Create the models directory if it doesn't exist
-        const modelsDir = '/models';
-        if (window.electron) {
-          window.electron.sendMessage('create-directory', modelsDir);
-        }
       } catch (error) {
         console.error('Error loading face-api models:', error);
         toast({
