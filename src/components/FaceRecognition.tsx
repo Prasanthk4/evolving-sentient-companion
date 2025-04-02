@@ -1,5 +1,6 @@
+
 import React, { useRef, useEffect, useState } from 'react';
-import { Camera, User, CheckCircle, XCircle, Shield } from 'lucide-react';
+import { Camera, User, CheckCircle, Shield } from 'lucide-react';
 import * as faceapi from 'face-api.js';
 import { 
   loadOwnerProfile, 
@@ -19,23 +20,55 @@ const FaceRecognition = () => {
   const [recognitionLog, setRecognitionLog] = useState<{time: string, text: string, isOwner: boolean}[]>([]);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [faceDescriptor, setFaceDescriptor] = useState<Float32Array | null>(null);
+  const [modelLoadError, setModelLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadModels = async () => {
       try {
-        // Make sure to use the correct path for loading models
+        // Create models directory in user data path using Electron IPC
+        if (window.electron) {
+          window.electron.sendMessage('create-directory', 'models');
+        }
+        
+        // Use production models path
         const modelPath = '/models';
         
-        // Load face-api models
-        await faceapi.nets.tinyFaceDetector.loadFromUri(modelPath);
-        await faceapi.nets.faceLandmark68Net.loadFromUri(modelPath);
-        await faceapi.nets.faceRecognitionNet.loadFromUri(modelPath);
-        await faceapi.nets.faceExpressionNet.loadFromUri(modelPath);
+        // Clear any previous model load error
+        setModelLoadError(null);
+        
+        // Load face-api models with error handling
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(modelPath).catch(error => {
+            console.error('Error loading tinyFaceDetector model:', error);
+            throw new Error('Failed to load face detector model');
+          }),
+          
+          faceapi.nets.faceLandmark68Net.loadFromUri(modelPath).catch(error => {
+            console.error('Error loading faceLandmark68Net model:', error);
+            throw new Error('Failed to load face landmark model');
+          }),
+          
+          faceapi.nets.faceRecognitionNet.loadFromUri(modelPath).catch(error => {
+            console.error('Error loading faceRecognitionNet model:', error);
+            throw new Error('Failed to load face recognition model');
+          })
+        ]);
+        
+        // Optional: Load face expression model if needed
+        try {
+          await faceapi.nets.faceExpressionNet.loadFromUri(modelPath);
+        } catch (error) {
+          console.warn('Face expression model not loaded, but continuing:', error);
+          // Non-critical, so we continue
+        }
         
         setModelsLoaded(true);
         console.log('Face API models loaded successfully');
       } catch (error) {
         console.error('Error loading face-api models:', error);
+        setModelLoadError(error instanceof Error ? error.message : 'Unknown error loading face models');
+        setModelsLoaded(false);
+        
         toast({
           title: "Face Recognition Error",
           description: "Failed to load facial recognition models. Some features may be limited.",
@@ -273,7 +306,7 @@ const FaceRecognition = () => {
         <div className="flex items-center">
           <div className={`w-3 h-3 rounded-full mr-1 ${isDetecting ? 'bg-jarvis-blue animate-pulse' : 'bg-jarvis-accent'}`}></div>
           <span className="text-sm text-muted-foreground">
-            {!modelsLoaded ? 'Loading models...' : isDetecting ? 'Active' : 'Inactive'}
+            {!modelsLoaded ? (modelLoadError ? 'Model Error' : 'Loading models...') : isDetecting ? 'Active' : 'Inactive'}
           </span>
         </div>
       </div>
@@ -293,7 +326,25 @@ const FaceRecognition = () => {
           className="absolute top-0 left-0 w-full h-full"
         />
         
-        {cameraPermission !== 'granted' && (
+        {modelLoadError && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-jarvis-dark/80 p-4">
+            <Shield className="text-jarvis-accent mb-2" size={24} />
+            <p className="text-jarvis-blue text-sm text-center mb-3">
+              Face recognition model loading error
+            </p>
+            <p className="text-xs text-jarvis-accent/80 text-center mb-3">
+              {modelLoadError}
+            </p>
+            <button
+              className="px-3 py-1.5 bg-jarvis-blue text-white text-xs rounded hover:bg-jarvis-blue-light transition-colors"
+              onClick={() => window.location.reload()}
+            >
+              Retry Loading Models
+            </button>
+          </div>
+        )}
+        
+        {cameraPermission !== 'granted' && !modelLoadError && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-jarvis-dark/80 p-4">
             <Shield className="text-jarvis-accent mb-2" size={24} />
             <p className="text-jarvis-blue text-sm text-center mb-3">

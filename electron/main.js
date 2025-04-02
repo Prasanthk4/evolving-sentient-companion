@@ -1,3 +1,4 @@
+
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const isDev = require('electron-is-dev');
@@ -45,6 +46,50 @@ function createWindow() {
 
   // Set up system monitoring
   setupSystemMonitoring();
+
+  // Ensure model directory exists and models are copied
+  ensureFaceModelsExist();
+}
+
+function ensureFaceModelsExist() {
+  // Create models directory if it doesn't exist
+  if (!fs.existsSync(modelsPath)) {
+    try {
+      fs.mkdirSync(modelsPath, { recursive: true });
+      console.log(`Created models directory at: ${modelsPath}`);
+    } catch (error) {
+      console.error(`Error creating models directory: ${error}`);
+    }
+  }
+
+  // Define model files to ensure
+  const requiredModelFiles = [
+    'tiny_face_detector_model-weights_manifest.json',
+    'tiny_face_detector_model-shard1',
+    'face_landmark_68_model-weights_manifest.json',
+    'face_landmark_68_model-shard1',
+    'face_recognition_model-weights_manifest.json',
+    'face_recognition_model-shard1',
+    'face_expression_model-weights_manifest.json',
+    'face_expression_model-shard1'
+  ];
+
+  // Copy model files from public/models to user's app data directory
+  const sourceDir = path.join(isDev ? process.cwd() : process.resourcesPath, 'public', 'models');
+  
+  requiredModelFiles.forEach(file => {
+    const sourcePath = path.join(sourceDir, file);
+    const destPath = path.join(modelsPath, file);
+    
+    if (!fs.existsSync(destPath) && fs.existsSync(sourcePath)) {
+      try {
+        fs.copyFileSync(sourcePath, destPath);
+        console.log(`Copied model file: ${file}`);
+      } catch (error) {
+        console.error(`Error copying model file ${file}:`, error);
+      }
+    }
+  });
 }
 
 function setupSystemMonitoring() {
