@@ -1,4 +1,3 @@
-
 /**
  * This file provides a compatibility layer for Electron's API when running in a browser environment
  */
@@ -123,6 +122,95 @@ const createMockElectronAPI = (): Window['electron'] => {
           console.error('Error retrieving modification history:', error);
           return [];
         }
+      }
+    },
+    emotionAnalysis: {
+      analyzeFrame: async (imageData) => {
+        console.log('Mock analyze emotion from frame');
+        // Simulate emotion analysis result
+        return {
+          dominant: ['neutral', 'happy', 'surprised'][Math.floor(Math.random() * 3)],
+          emotions: {
+            happy: Math.random() * 0.5,
+            sad: Math.random() * 0.2,
+            angry: Math.random() * 0.1,
+            surprised: Math.random() * 0.3,
+            neutral: Math.random() * 0.6,
+            fearful: Math.random() * 0.1,
+            disgusted: Math.random() * 0.05
+          },
+          confidence: 0.7 + (Math.random() * 0.3),
+          timestamp: Date.now()
+        };
+      },
+      getEmotionHistory: async () => {
+        console.log('Mock get emotion history');
+        try {
+          return JSON.parse(localStorage.getItem('emotion-history') || '[]');
+        } catch (error) {
+          console.error('Error retrieving emotion history:', error);
+          return [];
+        }
+      },
+      detectGesture: async (imageData) => {
+        console.log('Mock detect gesture from frame');
+        const gestures = ['wave', 'thumbs_up', 'thumbs_down', 'peace', 'none'];
+        return {
+          gesture: gestures[Math.floor(Math.random() * gestures.length)],
+          confidence: 0.6 + (Math.random() * 0.4),
+          timestamp: Date.now()
+        };
+      }
+    },
+    reinforcementLearning: {
+      submitFeedback: async (feedback) => {
+        console.log('Mock submit feedback:', feedback);
+        try {
+          // Store feedback in localStorage
+          const history = JSON.parse(localStorage.getItem('feedback-history') || '[]');
+          history.push(feedback);
+          localStorage.setItem('feedback-history', JSON.stringify(history));
+          return true;
+        } catch (error) {
+          console.error('Error storing feedback:', error);
+          return false;
+        }
+      },
+      getFeedbackHistory: async () => {
+        console.log('Mock get feedback history');
+        try {
+          return JSON.parse(localStorage.getItem('feedback-history') || '[]');
+        } catch (error) {
+          console.error('Error retrieving feedback history:', error);
+          return [];
+        }
+      },
+      getImprovedResponse: async (prompt, context) => {
+        console.log('Mock get improved response based on RLHF');
+        return `This is an improved response for "${prompt}" based on past feedback and reinforcement learning.`;
+      },
+      getPerformanceMetrics: async () => {
+        console.log('Mock get performance metrics');
+        // Get feedback history
+        const history = JSON.parse(localStorage.getItem('feedback-history') || '[]');
+        
+        // Calculate metrics if there's any feedback
+        if (history.length > 0) {
+          const scores = history.map((item: FeedbackData) => item.score);
+          const averageScore = scores.reduce((a: number, b: number) => a + b, 0) / scores.length;
+          return {
+            averageScore,
+            totalFeedback: history.length,
+            improvementRate: Math.min(0.95, averageScore / 5 + (history.length / 100))
+          };
+        }
+        
+        // Default metrics if no feedback
+        return {
+          averageScore: 0,
+          totalFeedback: 0,
+          improvementRate: 0
+        };
       }
     }
   };

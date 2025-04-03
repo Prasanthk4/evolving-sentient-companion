@@ -1,4 +1,3 @@
-
 const { contextBridge, ipcRenderer } = require('electron');
 
 // Expose IPC functions to the renderer process
@@ -100,6 +99,66 @@ contextBridge.exposeInMainWorld('electron', {
           resolve(history);
         });
         ipcRenderer.send('get-modification-history');
+      });
+    }
+  },
+  emotionAnalysis: {
+    analyzeFrame: (imageData) => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('emotion-analyzed', (event, result) => {
+          resolve(result.result);
+        });
+        ipcRenderer.send('analyze-emotion', imageData);
+      });
+    },
+    getEmotionHistory: () => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('emotion-history', (event, history) => {
+          resolve(history);
+        });
+        ipcRenderer.send('get-emotion-history');
+      });
+    },
+    detectGesture: (imageData) => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('gesture-detected', (event, result) => {
+          resolve(result.result);
+        });
+        ipcRenderer.send('detect-gesture', imageData);
+      });
+    }
+  },
+  reinforcementLearning: {
+    submitFeedback: (feedback) => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('feedback-submitted', (event, result) => {
+          resolve(result.success);
+        });
+        ipcRenderer.send('submit-feedback', feedback);
+      });
+    },
+    getFeedbackHistory: () => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('feedback-history', (event, history) => {
+          resolve(history);
+        });
+        ipcRenderer.send('get-feedback-history');
+      });
+    },
+    getImprovedResponse: (prompt, context) => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('improved-response', (event, response) => {
+          resolve(response);
+        });
+        ipcRenderer.send('get-improved-response', { prompt, context });
+      });
+    },
+    getPerformanceMetrics: () => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('performance-metrics', (event, metrics) => {
+          resolve(metrics);
+        });
+        ipcRenderer.send('get-performance-metrics');
       });
     }
   }

@@ -1,4 +1,3 @@
-
 interface OllamaRequest {
   id: string;
   prompt: string;
@@ -46,6 +45,53 @@ interface SelfModificationAPI {
   getModificationHistory: () => Promise<CodeModification[]>;
 }
 
+interface EmotionAnalysisResult {
+  dominant: string;
+  emotions: {
+    happy: number;
+    sad: number;
+    angry: number;
+    surprised: number;
+    neutral: number;
+    fearful: number;
+    disgusted: number;
+  };
+  confidence: number;
+  timestamp: number;
+}
+
+interface GestureDetectionResult {
+  gesture: string;
+  confidence: number;
+  timestamp: number;
+}
+
+interface EmotionAnalysisAPI {
+  analyzeFrame: (imageData: string) => Promise<EmotionAnalysisResult>;
+  getEmotionHistory: () => Promise<EmotionAnalysisResult[]>;
+  detectGesture: (imageData: string) => Promise<GestureDetectionResult>;
+}
+
+interface FeedbackData {
+  responseId: string;
+  score: number; // 1-5 rating
+  feedback?: string;
+  context: string;
+  emotion?: string;
+  timestamp: number;
+}
+
+interface ReinforcementLearningAPI {
+  submitFeedback: (feedback: FeedbackData) => Promise<boolean>;
+  getFeedbackHistory: () => Promise<FeedbackData[]>;
+  getImprovedResponse: (prompt: string, context: string) => Promise<string>;
+  getPerformanceMetrics: () => Promise<{
+    averageScore: number;
+    totalFeedback: number;
+    improvementRate: number;
+  }>;
+}
+
 interface ElectronAPI {
   ollama: OllamaElectronAPI;
   gemini: GeminiElectronAPI;
@@ -60,6 +106,8 @@ interface ElectronAPI {
     load: () => Promise<any>;
   };
   selfModify?: SelfModificationAPI;
+  emotionAnalysis?: EmotionAnalysisAPI;
+  reinforcementLearning?: ReinforcementLearningAPI;
 }
 
 declare global {

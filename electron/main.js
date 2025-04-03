@@ -1,4 +1,3 @@
-
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const isDev = require('electron-is-dev');
@@ -234,6 +233,262 @@ ipcMain.on('gemini-query', async (event, { id, prompt }) => {
     event.sender.send('gemini-response', {
       id,
       error: error.message
+    });
+  }
+});
+
+// Emotion Analysis API
+ipcMain.on('analyze-emotion', async (event, imageData) => {
+  console.log('Analyzing emotion from image data');
+  
+  try {
+    // In a real implementation, you would use a ML model like DeepFace or Affectiva
+    // This is a simplified mock implementation
+    
+    // Simulate an emotion analysis result
+    const emotions = {
+      happy: Math.random(),
+      sad: Math.random(),
+      angry: Math.random(),
+      surprised: Math.random(),
+      neutral: Math.random(),
+      fearful: Math.random(),
+      disgusted: Math.random()
+    };
+    
+    // Normalize to make sure values add up to 1
+    const sum = Object.values(emotions).reduce((a, b) => a + b, 0);
+    Object.keys(emotions).forEach(key => {
+      emotions[key] = emotions[key] / sum;
+    });
+    
+    // Find the dominant emotion
+    const dominant = Object.entries(emotions).sort((a, b) => b[1] - a[1])[0][0];
+    
+    const result = {
+      dominant,
+      emotions,
+      confidence: 0.7 + (Math.random() * 0.3),
+      timestamp: Date.now()
+    };
+    
+    // Save to history
+    saveEmotionToHistory(result);
+    
+    event.reply('emotion-analyzed', { success: true, result });
+  } catch (error) {
+    console.error('Error analyzing emotion:', error);
+    event.reply('emotion-analyzed', { success: false, error: error.message });
+  }
+});
+
+ipcMain.on('detect-gesture', async (event, imageData) => {
+  console.log('Detecting gesture from image data');
+  
+  try {
+    // In a real implementation, you would use MediaPipe or a similar library
+    // This is a simplified mock implementation
+    
+    const gestures = ['wave', 'thumbs_up', 'thumbs_down', 'peace', 'none'];
+    const gesture = gestures[Math.floor(Math.random() * gestures.length)];
+    
+    const result = {
+      gesture,
+      confidence: 0.6 + (Math.random() * 0.4),
+      timestamp: Date.now()
+    };
+    
+    event.reply('gesture-detected', { success: true, result });
+  } catch (error) {
+    console.error('Error detecting gesture:', error);
+    event.reply('gesture-detected', { success: false, error: error.message });
+  }
+});
+
+ipcMain.on('get-emotion-history', (event) => {
+  try {
+    const historyPath = path.join(userDataPath, 'karna-emotion-history.json');
+    
+    if (fs.existsSync(historyPath)) {
+      const history = JSON.parse(fs.readFileSync(historyPath, 'utf8'));
+      event.reply('emotion-history', history);
+    } else {
+      event.reply('emotion-history', []);
+    }
+  } catch (error) {
+    console.error('Error getting emotion history:', error);
+    event.reply('emotion-history', []);
+  }
+});
+
+// Helper function to save emotion to history
+const saveEmotionToHistory = (emotion) => {
+  try {
+    const historyPath = path.join(userDataPath, 'karna-emotion-history.json');
+    
+    let history = [];
+    if (fs.existsSync(historyPath)) {
+      history = JSON.parse(fs.readFileSync(historyPath, 'utf8'));
+    }
+    
+    // Add new emotion and limit history size
+    history.unshift(emotion);
+    if (history.length > 100) {
+      history = history.slice(0, 100);
+    }
+    
+    fs.writeFileSync(historyPath, JSON.stringify(history));
+  } catch (error) {
+    console.error('Error saving emotion to history:', error);
+  }
+};
+
+// Reinforcement Learning API
+ipcMain.on('submit-feedback', (event, feedback) => {
+  console.log('Submitting feedback:', feedback);
+  
+  try {
+    const feedbackPath = path.join(userDataPath, 'karna-feedback.json');
+    
+    let history = [];
+    if (fs.existsSync(feedbackPath)) {
+      history = JSON.parse(fs.readFileSync(feedbackPath, 'utf8'));
+    }
+    
+    // Add new feedback
+    history.push(feedback);
+    
+    fs.writeFileSync(feedbackPath, JSON.stringify(history));
+    event.reply('feedback-submitted', { success: true });
+  } catch (error) {
+    console.error('Error submitting feedback:', error);
+    event.reply('feedback-submitted', { success: false, error: error.message });
+  }
+});
+
+ipcMain.on('get-feedback-history', (event) => {
+  try {
+    const feedbackPath = path.join(userDataPath, 'karna-feedback.json');
+    
+    if (fs.existsSync(feedbackPath)) {
+      const history = JSON.parse(fs.readFileSync(feedbackPath, 'utf8'));
+      event.reply('feedback-history', history);
+    } else {
+      event.reply('feedback-history', []);
+    }
+  } catch (error) {
+    console.error('Error getting feedback history:', error);
+    event.reply('feedback-history', []);
+  }
+});
+
+ipcMain.on('get-improved-response', async (event, { prompt, context }) => {
+  console.log('Getting improved response based on RLHF');
+  
+  try {
+    // In a real implementation, you would use a RL/RLHF model
+    // For now, we'll use Ollama with a special prompt
+    
+    const feedbackPath = path.join(userDataPath, 'karna-feedback.json');
+    let feedbackHistory = [];
+    
+    if (fs.existsSync(feedbackPath)) {
+      feedbackHistory = JSON.parse(fs.readFileSync(feedbackPath, 'utf8'));
+    }
+    
+    // If not enough feedback, return empty string
+    if (feedbackHistory.length < 5) {
+      event.reply('improved-response', "");
+      return;
+    }
+    
+    // Find similar contexts and analyze feedback patterns
+    const relevantFeedback = feedbackHistory
+      .filter(item => item.context.toLowerCase().includes(context.toLowerCase()))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+    
+    if (relevantFeedback.length === 0) {
+      event.reply('improved-response', "");
+      return;
+    }
+    
+    // Use Ollama to generate an improved response
+    const feedbackSummary = relevantFeedback
+      .map(item => `Context: ${item.context}\nScore: ${item.score}\nFeedback: ${item.feedback || 'No comment'}`)
+      .join('\n\n');
+    
+    const promptTemplate = `I want to generate a better response based on past user feedback.
+    
+Current prompt: ${prompt}
+Context: ${context}
+
+Here is feedback received on similar responses:
+${feedbackSummary}
+
+Based on this feedback, generate an improved response that would likely receive a higher score. Focus on the aspects that received positive feedback and avoid patterns from low-scored responses.`;
+
+    const response = await fetch(`${OLLAMA_API_URL}/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'llama3',
+        prompt: promptTemplate,
+        stream: false,
+      }),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    event.reply('improved-response', data.response);
+  } catch (error) {
+    console.error('Error getting improved response:', error);
+    event.reply('improved-response', "");
+  }
+});
+
+ipcMain.on('get-performance-metrics', (event) => {
+  try {
+    const feedbackPath = path.join(userDataPath, 'karna-feedback.json');
+    
+    if (fs.existsSync(feedbackPath)) {
+      const history = JSON.parse(fs.readFileSync(feedbackPath, 'utf8'));
+      
+      if (history.length === 0) {
+        event.reply('performance-metrics', {
+          averageScore: 0,
+          totalFeedback: 0,
+          improvementRate: 0
+        });
+        return;
+      }
+      
+      const scores = history.map(item => item.score);
+      const averageScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+      
+      event.reply('performance-metrics', {
+        averageScore,
+        totalFeedback: history.length,
+        improvementRate: Math.min(0.95, averageScore / 5 + (history.length / 100))
+      });
+    } else {
+      event.reply('performance-metrics', {
+        averageScore: 0,
+        totalFeedback: 0,
+        improvementRate: 0
+      });
+    }
+  } catch (error) {
+    console.error('Error getting performance metrics:', error);
+    event.reply('performance-metrics', {
+      averageScore: 0,
+      totalFeedback: 0,
+      improvementRate: 0
     });
   }
 });
