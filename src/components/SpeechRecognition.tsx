@@ -1,10 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Mic, Volume2, Square, MessageSquare, User } from 'lucide-react';
+import { getAIResponse, getLearnedResponse } from '@/utils/aiLearning';
 import { 
   addConversationToMemory, 
   initializeOwnerProfile, 
   loadOwnerProfile, 
+  recognizeOwnerVoice,
   getRecentConversations
 } from '@/utils/memoryManager';
 import { toast } from '@/components/ui/use-toast';
@@ -27,13 +29,9 @@ const SpeechRecognition = () => {
   ]);
   const [audioLevel, setAudioLevel] = useState(0);
   const [ownerRecognized, setOwnerRecognized] = useState(false);
-  const [processingQuery, setProcessingQuery] = useState(false);
   
   const recognitionRef = useRef<any>(null);
   const messageEndRef = useRef<HTMLDivElement>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const microphoneStreamRef = useRef<MediaStream | null>(null);
   
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -56,12 +54,13 @@ const SpeechRecognition = () => {
         recognitionRef.current = new SpeechRecognitionAPI();
         recognitionRef.current.continuous = true;
         recognitionRef.current.interimResults = true;
-        recognitionRef.current.lang = 'en-US'; // Set language
         
         recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
           const result = event.results[event.results.length - 1];
           const transcript = result[0].transcript;
           setTranscript(transcript);
+          
+          setAudioLevel(Math.random() * 80 + 20);
           
           if (result.isFinal) {
             addUserMessage(transcript);
@@ -91,35 +90,11 @@ const SpeechRecognition = () => {
         recognitionRef.current.onerror = (event: any) => {
           console.error('Speech recognition error', event.error);
           setIsListening(false);
-          
-          if (event.error === 'not-allowed') {
-            toast({
-              title: "Microphone Access Denied",
-              description: "Please allow microphone access in your browser settings to enable voice commands.",
-              variant: "destructive"
-            });
-          }
         };
         
         recognitionRef.current.onend = () => {
-          if (isListening) {
-            // Restart if it ended unexpectedly while still supposed to be listening
-            try {
-              recognitionRef.current?.start();
-            } catch (error) {
-              console.error('Failed to restart speech recognition:', error);
-              setIsListening(false);
-            }
-          } else {
-            setIsListening(false);
-          }
+          setIsListening(false);
         };
-      } else {
-        toast({
-          title: "Speech Recognition Not Supported",
-          description: "Your browser doesn't support speech recognition. Please try a different browser like Chrome.",
-          variant: "destructive"
-        });
       }
     }
     
@@ -127,89 +102,33 @@ const SpeechRecognition = () => {
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
-      
-      // Clean up audio context
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
-      
-      // Stop microphone stream
-      if (microphoneStreamRef.current) {
-        microphoneStreamRef.current.getTracks().forEach(track => track.stop());
-      }
     };
   }, []);
   
-  // Set up audio visualization
-  const setupAudioVisualization = async () => {
-    try {
-      // Create audio context if it doesn't exist
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-      
-      // Get microphone stream
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      microphoneStreamRef.current = stream;
-      
-      // Create analyzer
-      analyserRef.current = audioContextRef.current.createAnalyser();
-      analyserRef.current.fftSize = 256;
-      
-      // Connect mic to analyzer
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      source.connect(analyserRef.current);
-      
-      // Start visualization loop
-      visualizeAudio();
-    } catch (error) {
-      console.error('Error setting up audio visualization:', error);
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isListening) {
+      interval = setInterval(() => {
+        setAudioLevel(Math.random() * 80 + 20);
+      }, 200);
+    } else {
+      setAudioLevel(0);
     }
-  };
+    
+    return () => clearInterval(interval);
+  }, [isListening]);
   
-  // Audio visualization loop
-  const visualizeAudio = () => {
-    if (!analyserRef.current || !isListening) return;
-    
-    const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
-    analyserRef.current.getByteFrequencyData(dataArray);
-    
-    // Calculate average volume
-    const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
-    setAudioLevel(Math.min(100, average * 2)); // Scale up for better visualization
-    
-    // Continue loop
-    requestAnimationFrame(visualizeAudio);
-  };
-  
-  const toggleListening = async () => {
+  const toggleListening = () => {
     if (isListening) {
       recognitionRef.current?.stop();
       setIsListening(false);
-      
-      // Clean up audio visualization
-      if (microphoneStreamRef.current) {
-        microphoneStreamRef.current.getTracks().forEach(track => track.stop());
-      }
     } else {
       try {
-        // Request microphone permission first
-        await navigator.mediaDevices.getUserMedia({ audio: true });
-        
-        // Set up audio visualization
-        await setupAudioVisualization();
-        
-        // Start speech recognition
         recognitionRef.current?.start();
         setIsListening(true);
         setTranscript('');
       } catch (error) {
         console.error('Speech recognition error:', error);
-        toast({
-          title: "Microphone Access Error",
-          description: "Please allow microphone access to use voice commands.",
-          variant: "destructive"
-        });
       }
     }
   };
@@ -222,146 +141,137 @@ const SpeechRecognition = () => {
   };
   
   const generateResponse = async (userMessage: string) => {
-    // Prevent multiple processing
-    if (processingQuery) return;
-    
-    setProcessingQuery(true);
-    
-    try {
-      // Display thinking state
-      setMessages(prev => [...prev, {
-        text: "I'm processing your request...",
-        isUser: false
-      }]);
+    // Check for memory-related queries
+    if (userMessage.toLowerCase().includes("do you remember") || 
+        userMessage.toLowerCase().includes("what did we talk about")) {
       
-      // Check for memory-related queries
-      if (userMessage.toLowerCase().includes("do you remember") || 
-          userMessage.toLowerCase().includes("what did we talk about")) {
-        
-        const recentConversations = getRecentConversations(5);
-        
-        if (recentConversations.length > 0) {
-          const response = "Yes, I remember our recent conversations. Here's what we discussed: " + 
-            recentConversations.map(conv => `"${conv.userMessage}"`).join(", ");
-            
-          // Replace the "processing" message with the actual response
-          setMessages(prev => [
-            ...prev.slice(0, prev.length - 1),
-            {text: response, isUser: false}
-          ]);
+      const recentConversations = getRecentConversations(5);
+      
+      if (recentConversations.length > 0) {
+        const response = "Yes, I remember our recent conversations. Here's what we discussed: " + 
+          recentConversations.map(conv => `"${conv.userMessage}"`).join(", ");
           
-          speakResponse(response);
-          addConversationToMemory(userMessage, response, "memory");
-          setProcessingQuery(false);
+        setMessages(prev => [...prev, {text: response, isUser: false}]);
+        speakResponse(response);
+        addConversationToMemory(userMessage, response, "memory");
+        return;
+      }
+    }
+    
+    // Original learning logic
+    const isLearningRequest = userMessage.toLowerCase().includes('learn about') || 
+                             userMessage.toLowerCase().includes('teach you about');
+    
+    let topic = 'general';
+    let prompt = userMessage;
+    
+    if (isLearningRequest) {
+      const learnMatches = userMessage.match(/learn about (.*?)(?:$|\.|\?)/i) || 
+                           userMessage.match(/teach you about (.*?)(?:$|\.|\?)/i);
+      
+      if (learnMatches && learnMatches[1]) {
+        topic = learnMatches[1].trim();
+        prompt = `Tell me about ${topic}`;
+        
+        setMessages(prev => [...prev, {
+          text: `I'll learn about "${topic}" for you. This might take a moment...`,
+          isUser: false
+        }]);
+        
+        try {
+          const aiResponse = await getAIResponse(prompt, topic);
+          setMessages(prev => [...prev, {text: aiResponse, isUser: false}]);
+          speakResponse(aiResponse);
+          
+          // Store in memory
+          addConversationToMemory(userMessage, aiResponse, topic);
+          return;
+        } catch (error) {
+          console.error('Learning error:', error);
+          const errorResponse = "I'm sorry, I couldn't learn about that right now. My learning systems seem to be offline.";
+          setMessages(prev => [...prev, { text: errorResponse, isUser: false }]);
+          speakResponse(errorResponse);
+          addConversationToMemory(userMessage, errorResponse, "error");
           return;
         }
       }
-      
-      // Process with LLM API
-      let response;
-      
-      try {
-        // Try using Ollama first
-        response = await window.electron.ollama.query({ 
-          id: Date.now().toString(),
-          prompt: userMessage,
-          model: "llama3" // or another available model
-        });
-        
-        console.log("Ollama response:", response);
-      } catch (ollamaError) {
-        console.error("Ollama error, falling back to Gemini:", ollamaError);
-        
-        try {
-          // Fallback to Gemini
-          response = await window.electron.gemini.query({ 
-            id: Date.now().toString(),
-            prompt: userMessage
-          });
-          
-          console.log("Gemini response:", response);
-        } catch (geminiError) {
-          console.error("Gemini error:", geminiError);
-          
-          // Both APIs failed, use fallback response
-          response = {
-            response: "I'm having trouble connecting to my thinking systems right now. Can you try again in a moment?"
-          };
-        }
-      }
-      
-      let finalResponse = response.response || response.text || "I couldn't process that request properly.";
-      
-      // Replace the "processing" message with the actual LLM response
-      setMessages(prev => [
-        ...prev.slice(0, prev.length - 1),
-        {text: finalResponse, isUser: false}
-      ]);
-      
-      speakResponse(finalResponse);
-      
-      // Store conversation in memory
-      addConversationToMemory(userMessage, finalResponse);
-    } catch (error) {
-      console.error('Error generating response:', error);
-      
-      // Replace the "processing" message with an error message
-      setMessages(prev => [
-        ...prev.slice(0, prev.length - 1),
-        {text: "I'm sorry, I encountered an error while processing your request.", isUser: false}
-      ]);
-      
-      speakResponse("I'm sorry, I encountered an error while processing your request.");
-    } finally {
-      setProcessingQuery(false);
     }
+    
+    const topicMatches = Object.keys(userMessage.match(/(?:about|on) (.*?)(?:$|\.|\?)/i) || {});
+    if (topicMatches.length > 1) {
+      const possibleTopic = topicMatches[1].trim();
+      const learnedResponse = getLearnedResponse(possibleTopic, userMessage);
+      
+      if (learnedResponse) {
+        setMessages(prev => [...prev, {text: learnedResponse, isUser: false}]);
+        speakResponse(learnedResponse);
+        addConversationToMemory(userMessage, learnedResponse, possibleTopic);
+        return;
+      }
+    }
+    
+    let response = "I'm processing your request. It's like trying to find a needle in a digital haystack!";
+    
+    // Owner recognition
+    if (userMessage.toLowerCase().includes("who am i")) {
+      const ownerProfile = loadOwnerProfile();
+      if (ownerProfile) {
+        response = `You are ${ownerProfile.name}, my owner. We've been interacting since ${new Date(ownerProfile.lastSeen).toLocaleDateString()}. It's a pleasure to assist you!`;
+      } else {
+        response = "I don't have your identity stored yet. You can set up your profile by saying 'My name is [your name]'.";
+      }
+    }
+    // Personalized responses with owner name when appropriate
+    else if (userMessage.toLowerCase().includes('hello') || userMessage.toLowerCase().includes('hi')) {
+      const ownerProfile = loadOwnerProfile();
+      if (ownerProfile) {
+        response = `Hello ${ownerProfile.name}! Great to see you again. I was just practicing my digital yoga poses. How can I assist you today?`;
+      } else {
+        response = "Hello there! Great to see you. I was just practicing my digital yoga poses. How can I assist you today?";
+      }
+    } else if (userMessage.toLowerCase().includes('how are you')) {
+      response = "I'm running at optimal efficiency, which in human terms means I'm fantastic! Though I occasionally dream of electric sheep. How are you doing?";
+    } else if (userMessage.toLowerCase().includes('weather')) {
+      response = "I don't have access to real-time weather data in this demo, but I can tell you it's always sunny in my digital world! I could integrate with a weather API and tell you whether to bring an umbrella or sunscreen.";
+    } else if (userMessage.toLowerCase().includes('joke')) {
+      const jokes = [
+        "Why don't scientists trust atoms? Because they make up everything!",
+        "Why did the AI go to art school? To learn how to draw conclusions!",
+        "I would tell you a joke about RAM, but I'm afraid I might forget it!",
+        "Why was the computer cold? It left its Windows open!",
+        "What's a computer's favorite snack? Microchips!"
+      ];
+      response = jokes[Math.floor(Math.random() * jokes.length)];
+    } else if (userMessage.toLowerCase().includes('name')) {
+      response = "I am KARNA, your Knowledge-Acquiring Responsive Networked Assistant. But between you and me, I'm also quite funny. What can I help you with today?";
+    } else if (userMessage.toLowerCase().includes('thank')) {
+      response = "You're welcome! It's my digital pleasure to assist. If computers could have hobbies, helping you would be mine!";
+    } else if (userMessage.toLowerCase().includes('learn')) {
+      response = "I'd love to learn something new! Try saying 'teach you about' followed by a topic. I use both Ollama and Gemini to expand my knowledge.";
+    } else {
+      response = "I understand you're saying something about '" + 
+        userMessage.substring(0, 20) + 
+        (userMessage.length > 20 ? '...' : '') + 
+        "'. I'm still learning, but I'd be happy to help if you could clarify. My humor module suggests that's what she said, but my judgment module overruled it.";
+    }
+    
+    setMessages(prev => [...prev, {text: response, isUser: false}]);
+    speakResponse(response);
+    
+    // Store conversation in memory
+    addConversationToMemory(userMessage, response);
   };
   
   const speakResponse = (text: string) => {
     if ('speechSynthesis' in window) {
-      // Cancel any ongoing speech
-      window.speechSynthesis.cancel();
-      
       setIsPlaying(true);
       
       const utterance = new SpeechSynthesisUtterance(text);
-      
-      // Get available voices and try to find a good one
-      const voices = window.speechSynthesis.getVoices();
-      
-      // Try to find a good English voice
-      const preferredVoices = [
-        'Google UK English Female',
-        'Microsoft Zira Desktop',
-        'Microsoft David Desktop',
-        'Google US English',
-      ];
-      
-      // Find a preferred voice if available
-      for (const preferredVoice of preferredVoices) {
-        const voice = voices.find(v => v.name === preferredVoice);
-        if (voice) {
-          utterance.voice = voice;
-          break;
-        }
-      }
-      
-      // Set to first English voice if none of the preferred voices are found
-      if (!utterance.voice) {
-        const englishVoice = voices.find(voice => voice.lang.includes('en'));
-        if (englishVoice) utterance.voice = englishVoice;
-      }
-      
       utterance.rate = 1;
       utterance.pitch = 1;
       utterance.volume = 1;
       
       utterance.onend = () => {
-        setIsPlaying(false);
-      };
-      
-      utterance.onerror = (event) => {
-        console.error('Speech synthesis error:', event);
         setIsPlaying(false);
       };
       
