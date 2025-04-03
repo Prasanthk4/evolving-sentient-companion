@@ -40,44 +40,66 @@ contextBridge.exposeInMainWorld('electron', {
     }
   },
   ollama: {
-    query: (prompt, model) => {
-      return new Promise((resolve, reject) => {
-        const requestId = Date.now().toString();
-        
-        const responseHandler = (event, { id, response, error }) => {
-          if (id === requestId) {
-            ipcRenderer.removeListener('ollama-response', responseHandler);
-            if (error) {
-              reject(error);
-            } else {
-              resolve(response);
-            }
-          }
-        };
-        
-        ipcRenderer.on('ollama-response', responseHandler);
-        ipcRenderer.send('ollama-query', { id: requestId, prompt, model });
+    query: (request) => {
+      ipcRenderer.send('ollama-query', request);
+    },
+    on: (channel, callback) => {
+      ipcRenderer.on(channel, callback);
+    },
+    off: (channel, callback) => {
+      ipcRenderer.removeListener(channel, callback);
+    },
+    getAvailableModels: () => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('ollama-models', (event, models) => {
+          resolve(models);
+        });
+        ipcRenderer.send('get-ollama-models');
       });
     }
   },
   gemini: {
-    query: (prompt) => {
-      return new Promise((resolve, reject) => {
-        const requestId = Date.now().toString();
-        
-        const responseHandler = (event, { id, response, error }) => {
-          if (id === requestId) {
-            ipcRenderer.removeListener('gemini-response', responseHandler);
-            if (error) {
-              reject(error);
-            } else {
-              resolve(response);
-            }
-          }
-        };
-        
-        ipcRenderer.on('gemini-response', responseHandler);
-        ipcRenderer.send('gemini-query', { id: requestId, prompt });
+    query: (request) => {
+      ipcRenderer.send('gemini-query', request);
+    },
+    on: (channel, callback) => {
+      ipcRenderer.on(channel, callback);
+    },
+    off: (channel, callback) => {
+      ipcRenderer.removeListener(channel, callback);
+    }
+  },
+  selfModify: {
+    analyzeCode: (filePath) => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('code-analyzed', (event, analysis) => {
+          resolve(analysis);
+        });
+        ipcRenderer.send('analyze-code', filePath);
+      });
+    },
+    suggestImprovement: (code, requirements) => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('improvement-suggested', (event, improvedCode) => {
+          resolve(improvedCode);
+        });
+        ipcRenderer.send('suggest-improvement', { code, requirements });
+      });
+    },
+    applyChange: (modification) => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('change-applied', (event, result) => {
+          resolve(result);
+        });
+        ipcRenderer.send('apply-change', modification);
+      });
+    },
+    getModificationHistory: () => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('modification-history', (event, history) => {
+          resolve(history);
+        });
+        ipcRenderer.send('get-modification-history');
       });
     }
   }

@@ -9,6 +9,7 @@ interface OllamaElectronAPI {
   query: (request: OllamaRequest) => void;
   on: (channel: string, callback: (event: any, data: any) => void) => void;
   off: (channel: string, callback: (event: any, data: any) => void) => void;
+  getAvailableModels: () => Promise<string[]>;
 }
 
 interface GeminiRequest {
@@ -28,6 +29,21 @@ interface AutomationResponse {
   error?: string;
 }
 
+interface CodeModification {
+  filePath: string;
+  originalCode: string;
+  modifiedCode: string;
+  purpose: string;
+  timestamp: number;
+}
+
+interface SelfModificationAPI {
+  analyzeCode: (filePath: string) => Promise<string>;
+  suggestImprovement: (code: string, requirements: string) => Promise<string>;
+  applyChange: (modification: CodeModification) => Promise<boolean>;
+  getModificationHistory: () => Promise<CodeModification[]>;
+}
+
 interface ElectronAPI {
   ollama: OllamaElectronAPI;
   gemini: GeminiElectronAPI;
@@ -41,6 +57,7 @@ interface ElectronAPI {
     save: (data: any) => Promise<any>;
     load: () => Promise<any>;
   };
+  selfModify?: SelfModificationAPI;
 }
 
 declare global {

@@ -10,6 +10,7 @@ const fetch = require('node-fetch');
 let mainWindow;
 const userDataPath = app.getPath('userData');
 const memoryFilePath = path.join(userDataPath, 'karna-memory.json');
+const modificationHistoryPath = path.join(userDataPath, 'karna-modifications.json');
 
 // Configuration for LLM services
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434/api';
@@ -156,6 +157,33 @@ ipcMain.on('ollama-query', async (event, { id, prompt, model }) => {
   }
 });
 
+// Get available Ollama models
+ipcMain.on('get-ollama-models', async (event) => {
+  try {
+    const response = await fetch(`${OLLAMA_API_URL}/tags`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Ollama API error: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    
+    // Extract model names from response
+    const modelNames = data.models.map(model => model.name);
+    
+    event.reply('ollama-models', modelNames);
+  } catch (error) {
+    console.error('Error getting Ollama models:', error);
+    event.reply('ollama-models', []);
+  }
+});
+
 // Real implementation for Gemini queries
 ipcMain.on('gemini-query', async (event, { id, prompt }) => {
   console.log(`Gemini query (${id}):`, prompt);
@@ -207,6 +235,112 @@ ipcMain.on('gemini-query', async (event, { id, prompt }) => {
       id,
       error: error.message
     });
+  }
+});
+
+// Self-code modification handlers
+ipcMain.on('analyze-code', async (event, filePath) => {
+  console.log(`Analyzing code: ${filePath}`);
+  
+  try {
+    // In a real implementation, you would read the file and analyze it
+    // This is a simplified implementation
+    
+    // Check if the file exists
+    if (fs.existsSync(filePath)) {
+      const fileContent = fs.readFileSync(filePath, 'utf8');
+      
+      // Use Ollama to analyze the code
+      const response = await fetch(`${OLLAMA_API_URL}/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama3',
+          prompt: `Analyze this code and provide insights about its structure, complexity, and potential improvements:\n\n${fileContent}`,
+          stream: false,
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Ollama API error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      event.reply('code-analyzed', data.response);
+    } else {
+      event.reply('code-analyzed', 'File not found');
+    }
+  } catch (error) {
+    console.error('Error analyzing code:', error);
+    event.reply('code-analyzed', `Error: ${error.message}`);
+  }
+});
+
+ipcMain.on('suggest-improvement', async (event, { code, requirements }) => {
+  console.log('Suggesting code improvement');
+  
+  try {
+    // Use Ollama to suggest improvements
+    const response = await fetch(`${OLLAMA_API_URL}/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'llama3',
+        prompt: `Improve this code based on these requirements: ${requirements}\n\nCode:\n${code}\n\nProvide only the improved code, no explanations.`,
+        stream: false,
+      }),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    event.reply('improvement-suggested', data.response);
+  } catch (error) {
+    console.error('Error suggesting improvement:', error);
+    event.reply('improvement-suggested', `Error: ${error.message}`);
+  }
+});
+
+ipcMain.on('apply-change', (event, modification) => {
+  console.log('Applying code modification:', modification);
+  
+  try {
+    // In a real implementation, you would modify the actual file
+    // For now, we'll just save the modification to history
+    
+    let history = [];
+    
+    if (fs.existsSync(modificationHistoryPath)) {
+      history = JSON.parse(fs.readFileSync(modificationHistoryPath, 'utf8'));
+    }
+    
+    history.push(modification);
+    fs.writeFileSync(modificationHistoryPath, JSON.stringify(history, null, 2));
+    
+    event.reply('change-applied', true);
+  } catch (error) {
+    console.error('Error applying change:', error);
+    event.reply('change-applied', false);
+  }
+});
+
+ipcMain.on('get-modification-history', (event) => {
+  try {
+    if (fs.existsSync(modificationHistoryPath)) {
+      const history = JSON.parse(fs.readFileSync(modificationHistoryPath, 'utf8'));
+      event.reply('modification-history', history);
+    } else {
+      event.reply('modification-history', []);
+    }
+  } catch (error) {
+    console.error('Error getting modification history:', error);
+    event.reply('modification-history', []);
   }
 });
 

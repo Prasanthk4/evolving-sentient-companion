@@ -15,6 +15,11 @@ const createMockElectronAPI = (): Window['electron'] => {
       },
       off: (channel, callback) => {
         console.log(`Mock removed listener for Ollama channel: ${channel}`);
+      },
+      getAvailableModels: async () => {
+        console.log('Mock get available Ollama models');
+        // Return some example models
+        return ['llama3', 'mistral', 'deepseek-llm', 'phi-2'];
       }
     },
     gemini: {
@@ -73,6 +78,38 @@ const createMockElectronAPI = (): Window['electron'] => {
         } catch (error) {
           console.error('Error loading from localStorage:', error);
           return Promise.resolve({ success: false, error: String(error) });
+        }
+      }
+    },
+    selfModify: {
+      analyzeCode: async (filePath) => {
+        console.log(`Mock analyze code: ${filePath}`);
+        return 'Mock code analysis results. This would analyze the code structure and complexity.';
+      },
+      suggestImprovement: async (code, requirements) => {
+        console.log(`Mock suggest code improvement based on: ${requirements}`);
+        return 'Mock code improvement suggestions. This would provide AI-generated improvements.';
+      },
+      applyChange: async (modification) => {
+        console.log('Mock apply code modification:', modification);
+        // In the mock, just save the modification history
+        try {
+          const history = JSON.parse(localStorage.getItem('code-modifications') || '[]');
+          history.push(modification);
+          localStorage.setItem('code-modifications', JSON.stringify(history));
+          return true;
+        } catch (error) {
+          console.error('Error storing modification:', error);
+          return false;
+        }
+      },
+      getModificationHistory: async () => {
+        console.log('Mock get modification history');
+        try {
+          return JSON.parse(localStorage.getItem('code-modifications') || '[]');
+        } catch (error) {
+          console.error('Error retrieving modification history:', error);
+          return [];
         }
       }
     }
