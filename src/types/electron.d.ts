@@ -22,20 +22,6 @@ interface GeminiElectronAPI {
   off: (channel: string, callback: (event: any, data: any) => void) => void;
 }
 
-interface AutomationRequest {
-  browserName?: string;
-  url?: string;
-  query?: string;
-  appName?: string;
-}
-
-interface AutomationResponse {
-  success: boolean;
-  action: string;
-  error?: string;
-  path?: string;
-}
-
 interface ElectronAPI {
   sendMessage: (channel: string, data: any) => void;
   receive: (channel: string, func: (...args: any[]) => void) => void;

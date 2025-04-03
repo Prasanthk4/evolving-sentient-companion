@@ -1,12 +1,12 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Volume2, Square, MessageSquare, User, Monitor, Search, Laptop } from 'lucide-react';
+import { Mic, Volume2, Square, MessageSquare, User } from 'lucide-react';
 import { 
   addConversationToMemory, 
   initializeOwnerProfile, 
   loadOwnerProfile, 
   getRecentConversations
 } from '@/utils/memoryManager';
-import { parseCommand, AutomationCommand, getAutomationLearningTopic } from '@/utils/desktopAutomation';
 import { toast } from '@/components/ui/use-toast';
 
 interface SpeechRecognitionEvent extends Event {
@@ -28,7 +28,6 @@ const SpeechRecognition = () => {
   const [audioLevel, setAudioLevel] = useState(0);
   const [ownerRecognized, setOwnerRecognized] = useState(false);
   const [processingQuery, setProcessingQuery] = useState(false);
-  const [isProcessingAutomation, setIsProcessingAutomation] = useState(false);
   
   const recognitionRef = useRef<any>(null);
   const messageEndRef = useRef<HTMLDivElement>(null);
@@ -40,6 +39,7 @@ const SpeechRecognition = () => {
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
   
+  // Check for owner profile on mount
   useEffect(() => {
     const ownerProfile = loadOwnerProfile();
     if (ownerProfile) {
@@ -66,6 +66,7 @@ const SpeechRecognition = () => {
           if (result.isFinal) {
             addUserMessage(transcript);
             
+            // If no owner profile exists, check if this is a setup command
             const ownerProfile = loadOwnerProfile();
             if (!ownerProfile && (transcript.toLowerCase().includes("i am") || transcript.toLowerCase().includes("my name is"))) {
               const nameMatch = transcript.match(/(?:I am|my name is) (\w+)/i);
@@ -102,6 +103,7 @@ const SpeechRecognition = () => {
         
         recognitionRef.current.onend = () => {
           if (isListening) {
+            // Restart if it ended unexpectedly while still supposed to be listening
             try {
               recognitionRef.current?.start();
             } catch (error) {
@@ -126,76 +128,57 @@ const SpeechRecognition = () => {
         recognitionRef.current.stop();
       }
       
+      // Clean up audio context
       if (audioContextRef.current) {
         audioContextRef.current.close();
       }
       
+      // Stop microphone stream
       if (microphoneStreamRef.current) {
         microphoneStreamRef.current.getTracks().forEach(track => track.stop());
       }
     };
   }, []);
   
-  useEffect(() => {
-    const handleAutomationResponse = (response: AutomationResponse) => {
-      setIsProcessingAutomation(false);
-      
-      if (response.success) {
-        const actionMessages = {
-          'open-browser': 'Browser opened successfully',
-          'web-search': 'Web search completed',
-          'open-application': 'Application launched',
-          'take-screenshot': 'Screenshot taken and saved',
-          'system-info': 'System information displayed',
-        };
-        
-        const message = actionMessages[response.action] || 'Command executed successfully';
-        setMessages(prev => [...prev, { text: message, isUser: false }]);
-        speakResponse(message);
-      } else {
-        const errorMessage = `I couldn't complete that action: ${response.error || 'Unknown error'}`;
-        setMessages(prev => [...prev, { text: errorMessage, isUser: false }]);
-        speakResponse(errorMessage);
-      }
-    };
-    
-    window.electron.receive('automation-response', handleAutomationResponse);
-    
-    return () => {
-      window.electron.receive('automation-response', () => {});
-    };
-  }, []);
-  
+  // Set up audio visualization
   const setupAudioVisualization = async () => {
     try {
+      // Create audio context if it doesn't exist
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
       
+      // Get microphone stream
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       microphoneStreamRef.current = stream;
       
+      // Create analyzer
       analyserRef.current = audioContextRef.current.createAnalyser();
       analyserRef.current.fftSize = 256;
       
+      // Connect mic to analyzer
       const source = audioContextRef.current.createMediaStreamSource(stream);
       source.connect(analyserRef.current);
       
+      // Start visualization loop
       visualizeAudio();
     } catch (error) {
       console.error('Error setting up audio visualization:', error);
     }
   };
   
+  // Audio visualization loop
   const visualizeAudio = () => {
     if (!analyserRef.current || !isListening) return;
     
     const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
     analyserRef.current.getByteFrequencyData(dataArray);
     
+    // Calculate average volume
     const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
-    setAudioLevel(Math.min(100, average * 2));
+    setAudioLevel(Math.min(100, average * 2)); // Scale up for better visualization
     
+    // Continue loop
     requestAnimationFrame(visualizeAudio);
   };
   
@@ -204,15 +187,19 @@ const SpeechRecognition = () => {
       recognitionRef.current?.stop();
       setIsListening(false);
       
+      // Clean up audio visualization
       if (microphoneStreamRef.current) {
         microphoneStreamRef.current.getTracks().forEach(track => track.stop());
       }
     } else {
       try {
+        // Request microphone permission first
         await navigator.mediaDevices.getUserMedia({ audio: true });
         
+        // Set up audio visualization
         await setupAudioVisualization();
         
+        // Start speech recognition
         recognitionRef.current?.start();
         setIsListening(true);
         setTranscript('');
@@ -235,24 +222,19 @@ const SpeechRecognition = () => {
   };
   
   const generateResponse = async (userMessage: string) => {
+    // Prevent multiple processing
     if (processingQuery) return;
     
     setProcessingQuery(true);
     
     try {
-      const automationCommand = parseCommand(userMessage);
-      
-      if (automationCommand.type !== 'unknown') {
-        executeAutomationCommand(automationCommand);
-        setProcessingQuery(false);
-        return;
-      }
-      
+      // Display thinking state
       setMessages(prev => [...prev, {
         text: "I'm processing your request...",
         isUser: false
       }]);
       
+      // Check for memory-related queries
       if (userMessage.toLowerCase().includes("do you remember") || 
           userMessage.toLowerCase().includes("what did we talk about")) {
         
@@ -262,6 +244,7 @@ const SpeechRecognition = () => {
           const response = "Yes, I remember our recent conversations. Here's what we discussed: " + 
             recentConversations.map(conv => `"${conv.userMessage}"`).join(", ");
             
+          // Replace the "processing" message with the actual response
           setMessages(prev => [
             ...prev.slice(0, prev.length - 1),
             {text: response, isUser: false}
@@ -274,13 +257,15 @@ const SpeechRecognition = () => {
         }
       }
       
+      // Process with LLM API
       let response;
       
       try {
+        // Try using Ollama first
         response = await window.electron.ollama.query({ 
           id: Date.now().toString(),
           prompt: userMessage,
-          model: "llama3"
+          model: "llama3" // or another available model
         });
         
         console.log("Ollama response:", response);
@@ -288,6 +273,7 @@ const SpeechRecognition = () => {
         console.error("Ollama error, falling back to Gemini:", ollamaError);
         
         try {
+          // Fallback to Gemini
           response = await window.electron.gemini.query({ 
             id: Date.now().toString(),
             prompt: userMessage
@@ -297,6 +283,7 @@ const SpeechRecognition = () => {
         } catch (geminiError) {
           console.error("Gemini error:", geminiError);
           
+          // Both APIs failed, use fallback response
           response = {
             response: "I'm having trouble connecting to my thinking systems right now. Can you try again in a moment?"
           };
@@ -305,6 +292,7 @@ const SpeechRecognition = () => {
       
       let finalResponse = response.response || response.text || "I couldn't process that request properly.";
       
+      // Replace the "processing" message with the actual LLM response
       setMessages(prev => [
         ...prev.slice(0, prev.length - 1),
         {text: finalResponse, isUser: false}
@@ -312,10 +300,12 @@ const SpeechRecognition = () => {
       
       speakResponse(finalResponse);
       
+      // Store conversation in memory
       addConversationToMemory(userMessage, finalResponse);
     } catch (error) {
       console.error('Error generating response:', error);
       
+      // Replace the "processing" message with an error message
       setMessages(prev => [
         ...prev.slice(0, prev.length - 1),
         {text: "I'm sorry, I encountered an error while processing your request.", isUser: false}
@@ -327,68 +317,19 @@ const SpeechRecognition = () => {
     }
   };
   
-  const executeAutomationCommand = (command: AutomationCommand) => {
-    setIsProcessingAutomation(true);
-    
-    setMessages(prev => [...prev, { 
-      text: `I'm processing your automation request: ${command.originalCommand}`, 
-      isUser: false 
-    }]);
-    
-    switch (command.type) {
-      case 'openBrowser':
-        window.electron.sendMessage('open-browser', { 
-          browserName: command.target || 'chrome'
-        });
-        break;
-        
-      case 'searchWeb':
-        window.electron.sendMessage('web-search', { 
-          query: command.query
-        });
-        break;
-        
-      case 'openApplication':
-        window.electron.sendMessage('open-application', { 
-          appName: command.target
-        });
-        break;
-        
-      case 'systemAction':
-        if (command.action === 'screenshot') {
-          window.electron.sendMessage('take-screenshot', {});
-        }
-        break;
-        
-      default:
-        setIsProcessingAutomation(false);
-        setMessages(prev => [...prev, { 
-          text: `I'm not sure how to automate that. Could you try a different command?`, 
-          isUser: false 
-        }]);
-        speakResponse(`I'm not sure how to automate that. Could you try a different command?`);
-    }
-    
-    const learningTopic = getAutomationLearningTopic(command);
-    if (learningTopic) {
-      addConversationToMemory(
-        command.originalCommand, 
-        `I processed the automation command to ${command.type}`,
-        learningTopic
-      );
-    }
-  };
-  
   const speakResponse = (text: string) => {
     if ('speechSynthesis' in window) {
+      // Cancel any ongoing speech
       window.speechSynthesis.cancel();
       
       setIsPlaying(true);
       
       const utterance = new SpeechSynthesisUtterance(text);
       
+      // Get available voices and try to find a good one
       const voices = window.speechSynthesis.getVoices();
       
+      // Try to find a good English voice
       const preferredVoices = [
         'Google UK English Female',
         'Microsoft Zira Desktop',
@@ -396,6 +337,7 @@ const SpeechRecognition = () => {
         'Google US English',
       ];
       
+      // Find a preferred voice if available
       for (const preferredVoice of preferredVoices) {
         const voice = voices.find(v => v.name === preferredVoice);
         if (voice) {
@@ -404,6 +346,7 @@ const SpeechRecognition = () => {
         }
       }
       
+      // Set to first English voice if none of the preferred voices are found
       if (!utterance.voice) {
         const englishVoice = voices.find(voice => voice.lang.includes('en'));
         if (englishVoice) utterance.voice = englishVoice;
@@ -475,15 +418,6 @@ const SpeechRecognition = () => {
         </div>
       </div>
       
-      <div className="glass-panel p-3 mb-4">
-        <div className="text-xs text-muted-foreground mb-2">Desktop Automation Commands:</div>
-        <div className="flex flex-wrap gap-2">
-          <AutomationHint icon={<Monitor size={12} />} text="Open Chrome" />
-          <AutomationHint icon={<Search size={12} />} text="Search for weather" />
-          <AutomationHint icon={<Laptop size={12} />} text="Open app Notepad" />
-        </div>
-      </div>
-      
       {isListening && (
         <div className="glass-panel p-3 mb-4">
           <div className="flex items-center">
@@ -545,20 +479,6 @@ const SpeechRecognition = () => {
           )}
         </button>
       </div>
-    </div>
-  );
-};
-
-interface AutomationHintProps {
-  icon: React.ReactNode;
-  text: string;
-}
-
-const AutomationHint: React.FC<AutomationHintProps> = ({ icon, text }) => {
-  return (
-    <div className="flex items-center bg-jarvis-dark-light rounded px-2 py-1 text-xs">
-      <span className="mr-1 text-jarvis-blue">{icon}</span>
-      <span>{text}</span>
     </div>
   );
 };
