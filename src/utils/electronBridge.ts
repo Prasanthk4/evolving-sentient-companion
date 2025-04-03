@@ -1,6 +1,7 @@
 /**
  * This file provides a compatibility layer for Electron's API when running in a browser environment
  */
+import { FeedbackData } from '@/types/electron';
 
 // Mock implementation of the Electron API for browser environments
 const createMockElectronAPI = (): Window['electron'] => {
