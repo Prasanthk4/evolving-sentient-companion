@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Database, Book, Clock, Trash2, Search, User, Brain } from 'lucide-react';
+import { Database, Book, Clock, Trash2, Search, User, Brain, Zap } from 'lucide-react';
 import { 
   loadMemoryContext, 
   loadOwnerProfile, 
@@ -8,14 +8,17 @@ import {
   ConversationMemory, 
   searchConversations 
 } from '@/utils/memoryManager';
+import { semanticSearch } from '@/utils/vectorMemory';
 import { toast } from '@/components/ui/use-toast';
+import { Button } from '@/components/ui/button';
 
 const MemorySystem = () => {
   const [owner, setOwner] = useState<{name: string, lastSeen: number} | null>(null);
   const [conversations, setConversations] = useState<ConversationMemory[]>([]);
   const [topics, setTopics] = useState<{[key: string]: {lastDiscussed: number, familiarity: number}}>({}); 
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeSection, setActiveSection] = useState<'recent' | 'topics' | 'search'>('recent');
+  const [activeSection, setActiveSection] = useState<'recent' | 'topics' | 'search' | 'semantic'>('recent');
+  const [useVectorSearch, setUseVectorSearch] = useState(false);
 
   useEffect(() => {
     loadMemoryData();
@@ -40,15 +43,30 @@ const MemorySystem = () => {
   const handleSearch = () => {
     if (!searchQuery.trim()) return;
     
-    const results = searchConversations(searchQuery);
-    setConversations(results);
-    setActiveSection('search');
-    
-    if (results.length === 0) {
-      toast({
-        title: "No results found",
-        description: `I couldn't find any memories related to "${searchQuery}"`
-      });
+    if (useVectorSearch) {
+      // Use semantic search
+      const results = semanticSearch(searchQuery);
+      setConversations(results);
+      setActiveSection('semantic');
+      
+      if (results.length === 0) {
+        toast({
+          title: "No results found",
+          description: `I couldn't find any memories semantically related to "${searchQuery}"`
+        });
+      }
+    } else {
+      // Use keyword search
+      const results = searchConversations(searchQuery);
+      setConversations(results);
+      setActiveSection('search');
+      
+      if (results.length === 0) {
+        toast({
+          title: "No results found",
+          description: `I couldn't find any memories related to "${searchQuery}"`
+        });
+      }
     }
   };
   
@@ -107,34 +125,66 @@ const MemorySystem = () => {
           )}
         </div>
         
-        <div className="flex space-x-2">
-          <button
-            onClick={() => setActiveSection('recent')}
-            className={`px-2 py-1 text-xs rounded ${
-              activeSection === 'recent' 
-                ? 'bg-jarvis-blue text-white'
-                : 'text-muted-foreground hover:text-jarvis-blue'
-            }`}
-          >
-            Recent
-          </button>
-          <button
-            onClick={() => setActiveSection('topics')}
-            className={`px-2 py-1 text-xs rounded ${
-              activeSection === 'topics' 
-                ? 'bg-jarvis-blue text-white'
-                : 'text-muted-foreground hover:text-jarvis-blue'
-            }`}
-          >
-            Topics
-          </button>
-          {activeSection === 'search' && (
+        <div className="flex justify-between items-center">
+          <div className="flex space-x-2">
             <button
-              className="px-2 py-1 text-xs rounded bg-jarvis-blue text-white"
+              onClick={() => setActiveSection('recent')}
+              className={`px-2 py-1 text-xs rounded ${
+                activeSection === 'recent' 
+                  ? 'bg-jarvis-blue text-white'
+                  : 'text-muted-foreground hover:text-jarvis-blue'
+              }`}
             >
-              Search Results
+              Recent
             </button>
-          )}
+            <button
+              onClick={() => setActiveSection('topics')}
+              className={`px-2 py-1 text-xs rounded ${
+                activeSection === 'topics' 
+                  ? 'bg-jarvis-blue text-white'
+                  : 'text-muted-foreground hover:text-jarvis-blue'
+              }`}
+            >
+              Topics
+            </button>
+            {activeSection === 'search' && (
+              <button
+                className="px-2 py-1 text-xs rounded bg-jarvis-blue text-white"
+              >
+                Search Results
+              </button>
+            )}
+            {activeSection === 'semantic' && (
+              <button
+                className="px-2 py-1 text-xs rounded bg-jarvis-accent text-white"
+              >
+                Semantic Results
+              </button>
+            )}
+          </div>
+          
+          <div className="flex items-center">
+            <label className="text-xs flex items-center cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={useVectorSearch}
+                onChange={() => setUseVectorSearch(!useVectorSearch)}
+                className="mr-1 h-3 w-3"
+              />
+              <Zap size={12} className="mr-1 text-jarvis-accent" />
+              Semantic Search
+            </label>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="ml-2 h-6 px-2 text-jarvis-blue"
+              onClick={handleSearch}
+              disabled={!searchQuery.trim()}
+            >
+              <Search size={12} className="mr-1" />
+              Search
+            </Button>
+          </div>
         </div>
       </div>
       
@@ -199,11 +249,16 @@ const MemorySystem = () => {
           </div>
         )}
         
-        {activeSection === 'search' && (
+        {(activeSection === 'search' || activeSection === 'semantic') && (
           <div className="space-y-3">
             <h3 className="text-sm font-medium mb-2 flex items-center">
               <Search size={14} className="mr-1" /> 
-              Search Results for "{searchQuery}"
+              {activeSection === 'semantic' ? 'Semantic' : 'Search'} Results for "{searchQuery}"
+              {activeSection === 'semantic' && (
+                <span className="ml-2 text-xs text-jarvis-accent flex items-center">
+                  <Zap size={10} className="mr-1" /> Using Vector Similarity
+                </span>
+              )}
             </h3>
             {conversations.length === 0 ? (
               <p className="text-xs text-muted-foreground">No results found.</p>

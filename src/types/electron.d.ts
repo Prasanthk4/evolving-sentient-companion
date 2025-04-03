@@ -73,12 +73,13 @@ interface EmotionAnalysisAPI {
 }
 
 interface FeedbackData {
-  responseId: string;
+  id?: string;
+  timestamp: number;
+  prompt: string;
+  response: string;
   score: number; // 1-5 rating
   feedback?: string;
-  context: string;
-  emotion?: string;
-  timestamp: number;
+  category?: 'accuracy' | 'helpfulness' | 'safety' | 'other';
 }
 
 interface ReinforcementLearningAPI {

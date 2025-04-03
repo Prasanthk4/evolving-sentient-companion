@@ -9,7 +9,8 @@ import SystemMonitor from './SystemMonitor';
 import SelfLearning from './SelfLearning';
 import SelfImprovement from './SelfImprovement';
 import MemorySystem from './MemorySystem';
-import { Database, Brain, Zap, Network, FileCode, MessageSquare, BarChart, ChevronLeft, ChevronRight, Cpu, Laugh, Lightbulb } from 'lucide-react';
+import KnowledgeExpansion from './KnowledgeExpansion';
+import { Database, Brain, Zap, Network, FileCode, MessageSquare, BarChart, ChevronLeft, ChevronRight, Cpu, Laugh, Lightbulb, BookOpen } from 'lucide-react';
 
 const KarnaDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -33,6 +34,7 @@ const KarnaDashboard = () => {
               <NavButton icon={Brain} label="Think" active={activeTab === 'think'} onClick={() => setActiveTab('think')} />
               <NavButton icon={MessageSquare} label="Chat" active={activeTab === 'chat'} onClick={() => setActiveTab('chat')} />
               <NavButton icon={Lightbulb} label="Learn" active={activeTab === 'learn'} onClick={() => setActiveTab('learn')} />
+              <NavButton icon={BookOpen} label="Knowledge" active={activeTab === 'knowledge'} onClick={() => setActiveTab('knowledge')} />
               <NavButton icon={Zap} label="Improve" active={activeTab === 'improve'} onClick={() => setActiveTab('improve')} />
               <NavButton icon={Database} label="Memory" active={activeTab === 'memory'} onClick={() => setActiveTab('memory')} />
               <NavButton icon={Cpu} label="System" active={activeTab === 'system'} onClick={() => setActiveTab('system')} />
@@ -67,6 +69,7 @@ const KarnaDashboard = () => {
                 {activeTab === 'think' && <KarnaCore />}
                 {activeTab === 'system' && <SystemMonitor />}
                 {activeTab === 'learn' && <SelfLearning />}
+                {activeTab === 'knowledge' && <KnowledgeExpansion />}
                 {activeTab === 'improve' && <SelfImprovement />}
                 {activeTab === 'memory' && <MemorySystem />}
                 {(activeTab === 'think' || activeTab === 'chat' || activeTab === 'memory') && <MultiAgentSystem />}
