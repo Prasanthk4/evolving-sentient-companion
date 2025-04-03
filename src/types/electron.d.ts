@@ -35,6 +35,8 @@ interface CodeModification {
   modifiedCode: string;
   purpose: string;
   timestamp: number;
+  appliedBy: 'user' | 'ai';
+  approved: boolean;
 }
 
 interface SelfModificationAPI {

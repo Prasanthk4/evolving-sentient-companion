@@ -95,7 +95,13 @@ const createMockElectronAPI = (): Window['electron'] => {
         // In the mock, just save the modification history
         try {
           const history = JSON.parse(localStorage.getItem('code-modifications') || '[]');
-          history.push(modification);
+          // Ensure the mock modification has all required properties
+          const completeModification = {
+            ...modification,
+            appliedBy: modification.appliedBy || 'ai',
+            approved: modification.approved !== undefined ? modification.approved : true
+          };
+          history.push(completeModification);
           localStorage.setItem('code-modifications', JSON.stringify(history));
           return true;
         } catch (error) {
@@ -106,7 +112,13 @@ const createMockElectronAPI = (): Window['electron'] => {
       getModificationHistory: async () => {
         console.log('Mock get modification history');
         try {
-          return JSON.parse(localStorage.getItem('code-modifications') || '[]');
+          // Ensure the loaded modifications have all required properties
+          const history = JSON.parse(localStorage.getItem('code-modifications') || '[]');
+          return history.map((mod: any) => ({
+            ...mod,
+            appliedBy: mod.appliedBy || 'ai',
+            approved: mod.approved !== undefined ? mod.approved : true
+          }));
         } catch (error) {
           console.error('Error retrieving modification history:', error);
           return [];
