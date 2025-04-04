@@ -5,9 +5,9 @@ import {
   submitFeedback, 
   getFeedbackHistory, 
   getPerformanceMetrics,
-  PerformanceMetrics,
-  FeedbackData
+  PerformanceMetrics
 } from '@/utils/reinforcementLearning';
+import { FeedbackData } from '@/types/electron';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
@@ -69,6 +69,8 @@ const FeedbackSystem: React.FC<FeedbackSystemProps> = ({
     try {
       await submitFeedback({
         responseId,
+        prompt: '', // Add required field
+        response: '', // Add required field
         score,
         feedback: feedback.trim() || undefined,
         context,

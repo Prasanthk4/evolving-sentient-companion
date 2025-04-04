@@ -1,3 +1,4 @@
+
 interface OllamaRequest {
   id: string;
   prompt: string;
@@ -72,7 +73,7 @@ interface EmotionAnalysisAPI {
   detectGesture: (imageData: string) => Promise<GestureDetectionResult>;
 }
 
-interface FeedbackData {
+export interface FeedbackData {
   id?: string;
   timestamp: number;
   prompt: string;
@@ -80,6 +81,9 @@ interface FeedbackData {
   score: number; // 1-5 rating
   feedback?: string;
   category?: 'accuracy' | 'helpfulness' | 'safety' | 'other';
+  responseId?: string;
+  context?: string;
+  emotion?: string;
 }
 
 interface ReinforcementLearningAPI {

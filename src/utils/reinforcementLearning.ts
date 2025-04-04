@@ -1,16 +1,8 @@
 import { toast } from "@/components/ui/use-toast";
 import { queryLLM } from "@/utils/advancedLLM";
+import { FeedbackData } from "@/types/electron";
 
-// Types for reinforcement learning
-export interface FeedbackData {
-  responseId: string;
-  score: number; // 1-5 rating
-  feedback?: string;
-  context: string;
-  emotion?: string;
-  timestamp: number;
-}
-
+// Types for performance metrics
 export interface PerformanceMetrics {
   averageScore: number;
   totalFeedback: number;
@@ -138,7 +130,7 @@ export const getImprovedResponse = async (prompt: string, context: string): Prom
     
     // Find similar contexts and analyze feedback patterns
     const relevantFeedback = history
-      .filter(item => item.context.toLowerCase().includes(context.toLowerCase()))
+      .filter(item => item.context && item.context.toLowerCase().includes(context.toLowerCase()))
       .sort((a, b) => b.score - a.score) // Sort by highest scored responses first
       .slice(0, 5); // Take the top 5
     
@@ -149,7 +141,7 @@ export const getImprovedResponse = async (prompt: string, context: string): Prom
     
     // Use LLM to generate an improved response based on feedback
     const feedbackSummary = relevantFeedback
-      .map(item => `Context: ${item.context}\nScore: ${item.score}\nFeedback: ${item.feedback || 'No comment'}`)
+      .map(item => `Context: ${item.context || 'General'}\nScore: ${item.score}\nFeedback: ${item.feedback || 'No comment'}`)
       .join('\n\n');
     
     const promptTemplate = `I want to generate a better response based on past user feedback.
