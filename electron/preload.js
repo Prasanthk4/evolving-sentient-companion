@@ -1,3 +1,4 @@
+
 const { contextBridge, ipcRenderer } = require('electron');
 
 // Expose IPC functions to the renderer process
@@ -159,6 +160,79 @@ contextBridge.exposeInMainWorld('electron', {
           resolve(metrics);
         });
         ipcRenderer.send('get-performance-metrics');
+      });
+    }
+  },
+  // New APIs for Speech-to-Text
+  speechToText: {
+    transcribeAudio: (audioData) => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('audio-transcribed', (event, result) => {
+          resolve(result);
+        });
+        ipcRenderer.send('transcribe-audio', audioData);
+      });
+    },
+    startListening: () => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('listening-started', (event, result) => {
+          resolve(result.success);
+        });
+        ipcRenderer.send('start-listening');
+      });
+    },
+    stopListening: () => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('listening-stopped', (event, result) => {
+          resolve(result.success);
+        });
+        ipcRenderer.send('stop-listening');
+      });
+    }
+  },
+  // New API for Text-to-Speech
+  textToSpeech: {
+    speak: (text, options) => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('speech-completed', (event, result) => {
+          resolve(result.success);
+        });
+        ipcRenderer.send('tts-speak', { text, options });
+      });
+    },
+    getVoices: () => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('tts-voices', (event, voices) => {
+          resolve(voices);
+        });
+        ipcRenderer.send('get-tts-voices');
+      });
+    }
+  },
+  // New API for Knowledge Expansion
+  knowledgeExpansion: {
+    fetchWikipedia: (topic) => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('wikipedia-fetched', (event, data) => {
+          resolve(data);
+        });
+        ipcRenderer.send('fetch-wikipedia', topic);
+      });
+    },
+    fetchNews: (query) => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('news-fetched', (event, articles) => {
+          resolve(articles);
+        });
+        ipcRenderer.send('fetch-news', query);
+      });
+    },
+    scrapeWebsite: (url) => {
+      return new Promise((resolve) => {
+        ipcRenderer.once('website-scraped', (event, data) => {
+          resolve(data);
+        });
+        ipcRenderer.send('scrape-website', url);
       });
     }
   }

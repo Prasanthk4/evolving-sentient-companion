@@ -1,5 +1,4 @@
 
-
 interface OllamaRequest {
   id: string;
   prompt: string;
@@ -75,6 +74,35 @@ interface EmotionAnalysisAPI {
   detectGesture: (imageData: string) => Promise<GestureDetectionResult>;
 }
 
+interface SpeechToTextAPI {
+  transcribeAudio: (audioData: Blob) => Promise<{
+    transcript: string;
+    confidence: number;
+  }>;
+  startListening: () => Promise<boolean>;
+  stopListening: () => Promise<boolean>;
+}
+
+interface TextToSpeechAPI {
+  speak: (text: string, options?: {
+    voice?: string;
+    rate?: number;
+    pitch?: number;
+    volume?: number;
+  }) => Promise<boolean>;
+  getVoices: () => Promise<string[]>;
+}
+
+interface KnowledgeExpansionAPI {
+  fetchWikipedia: (topic: string) => Promise<any>;
+  fetchNews: (query: string) => Promise<any[]>;
+  scrapeWebsite: (url: string) => Promise<{
+    title: string;
+    content: string;
+    links: string[];
+  }>;
+}
+
 export interface FeedbackData {
   id?: string;
   timestamp: number;
@@ -115,6 +143,9 @@ interface ElectronAPI {
   selfModify?: SelfModificationAPI;
   emotionAnalysis?: EmotionAnalysisAPI;
   reinforcementLearning?: ReinforcementLearningAPI;
+  speechToText?: SpeechToTextAPI;
+  textToSpeech?: TextToSpeechAPI;
+  knowledgeExpansion?: KnowledgeExpansionAPI;
 }
 
 declare global {

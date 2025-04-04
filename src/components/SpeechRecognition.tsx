@@ -10,15 +10,10 @@ import {
   getRecentConversations
 } from '@/utils/memoryManager';
 import { toast } from '@/components/ui/use-toast';
-
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-}
-
-interface SpeechRecognitionResult {
-  transcript: string;
-  isFinal: boolean;
-}
+import { KarnaSpeechRecognition, SpeechRecognitionResult, transcribeAudioWithWhisper } from '@/utils/speechRecognition';
+import { tts } from '@/utils/textToSpeech';
+import { processWithAgents } from '@/utils/multiAgentSystem';
+import { fetchFromWikipedia } from '@/utils/knowledgeExpansion';
 
 const SpeechRecognition = () => {
   const [isListening, setIsListening] = useState(false);
@@ -29,8 +24,9 @@ const SpeechRecognition = () => {
   ]);
   const [audioLevel, setAudioLevel] = useState(0);
   const [ownerRecognized, setOwnerRecognized] = useState(false);
+  const [useMultiAgent, setUseMultiAgent] = useState(true);
   
-  const recognitionRef = useRef<any>(null);
+  const speechRecognitionRef = useRef<KarnaSpeechRecognition | null>(null);
   const messageEndRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
@@ -45,63 +41,51 @@ const SpeechRecognition = () => {
     }
   }, []);
   
+  // Initialize speech recognition
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const SpeechRecognitionAPI = window.SpeechRecognition || 
-                                (window as any).webkitSpeechRecognition;
+      // Initialize our custom speech recognition handler
+      speechRecognitionRef.current = new KarnaSpeechRecognition({
+        continuous: true,
+        interimResults: true,
+        language: 'en-US'
+      });
       
-      if (SpeechRecognitionAPI) {
-        recognitionRef.current = new SpeechRecognitionAPI();
-        recognitionRef.current.continuous = true;
-        recognitionRef.current.interimResults = true;
+      speechRecognitionRef.current.onResult((result: SpeechRecognitionResult) => {
+        setTranscript(result.transcript);
         
-        recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
-          const result = event.results[event.results.length - 1];
-          const transcript = result[0].transcript;
-          setTranscript(transcript);
-          
-          setAudioLevel(Math.random() * 80 + 20);
-          
-          if (result.isFinal) {
-            addUserMessage(transcript);
-            
-            // If no owner profile exists, check if this is a setup command
-            const ownerProfile = loadOwnerProfile();
-            if (!ownerProfile && (transcript.toLowerCase().includes("i am") || transcript.toLowerCase().includes("my name is"))) {
-              const nameMatch = transcript.match(/(?:I am|my name is) (\w+)/i);
-              if (nameMatch && nameMatch[1]) {
-                const ownerName = nameMatch[1];
-                initializeOwnerProfile(ownerName);
-                setOwnerRecognized(true);
-                
-                setTimeout(() => {
-                  const response = `Hello ${ownerName}, I've registered you as my owner. I'll remember your voice and our conversations from now on. It's a pleasure to meet you!`;
-                  setMessages(prev => [...prev, {text: response, isUser: false}]);
-                  speakResponse(response);
-                }, 500);
-                return;
-              }
-            }
-            
-            setTimeout(() => generateResponse(transcript), 500);
-          }
-        };
+        setAudioLevel(Math.random() * 80 + 20);
         
-        recognitionRef.current.onerror = (event: any) => {
-          console.error('Speech recognition error', event.error);
-          setIsListening(false);
-        };
-        
-        recognitionRef.current.onend = () => {
-          setIsListening(false);
-        };
-      }
+        if (result.isFinal) {
+          addUserMessage(result.transcript);
+          processSpeechInput(result.transcript);
+        }
+      });
+      
+      speechRecognitionRef.current.onEnd(() => {
+        setIsListening(false);
+      });
+      
+      speechRecognitionRef.current.onError((error) => {
+        console.error('Speech recognition error', error);
+        setIsListening(false);
+      });
+      
+      // Initialize TTS
+      tts.onStart((text) => {
+        setIsPlaying(true);
+      });
+      
+      tts.onEnd((text) => {
+        setIsPlaying(false);
+      });
     }
     
     return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
+      if (speechRecognitionRef.current) {
+        speechRecognitionRef.current.stop();
       }
+      tts.stop();
     };
   }, []);
   
@@ -120,15 +104,36 @@ const SpeechRecognition = () => {
   
   const toggleListening = () => {
     if (isListening) {
-      recognitionRef.current?.stop();
+      if (speechRecognitionRef.current) {
+        speechRecognitionRef.current.stop();
+      }
       setIsListening(false);
     } else {
-      try {
-        recognitionRef.current?.start();
+      if (speechRecognitionRef.current && speechRecognitionRef.current.start()) {
         setIsListening(true);
         setTranscript('');
-      } catch (error) {
-        console.error('Speech recognition error:', error);
+      } else {
+        // Try using Whisper API via Electron if available
+        if (window.electron?.speechToText?.startListening) {
+          window.electron.speechToText.startListening().then(success => {
+            if (success) {
+              setIsListening(true);
+              setTranscript('');
+            } else {
+              toast({
+                title: "Speech Recognition Failed",
+                description: "Could not start speech recognition. Please try again.",
+                variant: "destructive"
+              });
+            }
+          });
+        } else {
+          toast({
+            title: "Speech Recognition Unavailable",
+            description: "Your browser doesn't support speech recognition. Try using Chrome or Edge.",
+            variant: "destructive"
+          });
+        }
       }
     }
   };
@@ -140,7 +145,53 @@ const SpeechRecognition = () => {
     }
   };
   
-  const generateResponse = async (userMessage: string) => {
+  const processSpeechInput = async (userMessage: string) => {
+    // Check for owner profile setup
+    const ownerProfile = loadOwnerProfile();
+    if (!ownerProfile && (userMessage.toLowerCase().includes("i am") || userMessage.toLowerCase().includes("my name is"))) {
+      const nameMatch = userMessage.match(/(?:I am|my name is) (\w+)/i);
+      if (nameMatch && nameMatch[1]) {
+        const ownerName = nameMatch[1];
+        initializeOwnerProfile(ownerName);
+        setOwnerRecognized(true);
+        
+        setTimeout(() => {
+          const response = `Hello ${ownerName}, I've registered you as my owner. I'll remember your voice and our conversations from now on. It's a pleasure to meet you!`;
+          setMessages(prev => [...prev, {text: response, isUser: false}]);
+          speakResponse(response);
+        }, 500);
+        return;
+      }
+    }
+    
+    // Try processing with multi-agent system first if enabled
+    if (useMultiAgent) {
+      try {
+        setMessages(prev => [...prev, {
+          text: "Processing your request through my agent network...",
+          isUser: false
+        }]);
+        
+        const multiAgentResponse = await processWithAgents(userMessage);
+        
+        setMessages(prev => {
+          // Remove the processing message
+          const newMessages = prev.filter((msg, index) => 
+            !(index === prev.length - 1 && msg.text.includes("Processing your request"))
+          );
+          // Add the actual response
+          return [...newMessages, {text: multiAgentResponse, isUser: false}];
+        });
+        
+        speakResponse(multiAgentResponse);
+        return;
+      } catch (error) {
+        console.error('Error in multi-agent processing:', error);
+        // Fall back to standard processing
+      }
+    }
+    
+    // Standard processing if multi-agent fails or is disabled
     // Check for memory-related queries
     if (userMessage.toLowerCase().includes("do you remember") || 
         userMessage.toLowerCase().includes("what did we talk about")) {
@@ -155,6 +206,46 @@ const SpeechRecognition = () => {
         speakResponse(response);
         addConversationToMemory(userMessage, response, "memory");
         return;
+      }
+    }
+    
+    // Check for knowledge queries
+    if (userMessage.toLowerCase().includes("tell me about") || 
+        userMessage.toLowerCase().includes("what is") ||
+        userMessage.toLowerCase().includes("who is")) {
+      
+      const topicMatch = userMessage.match(/(?:tell me about|what is|who is) ([\w\s]+)(?:\?|$)/i);
+      
+      if (topicMatch && topicMatch[1]) {
+        const topic = topicMatch[1].trim();
+        
+        setMessages(prev => [...prev, {
+          text: `I'll look up information about "${topic}" for you...`,
+          isUser: false
+        }]);
+        
+        try {
+          const knowledgeEntry = await fetchFromWikipedia(topic);
+          
+          if (knowledgeEntry) {
+            const response = `${knowledgeEntry.title}: ${knowledgeEntry.content}`;
+            
+            setMessages(prev => {
+              // Remove the processing message
+              const newMessages = prev.filter((msg, index) => 
+                !(index === prev.length - 1 && msg.text.includes("I'll look up information"))
+              );
+              // Add the actual response
+              return [...newMessages, {text: response, isUser: false}];
+            });
+            
+            speakResponse(response);
+            addConversationToMemory(userMessage, response, topic);
+            return;
+          }
+        } catch (error) {
+          console.error('Error fetching knowledge:', error);
+        }
       }
     }
     
@@ -221,6 +312,17 @@ const SpeechRecognition = () => {
         response = "I don't have your identity stored yet. You can set up your profile by saying 'My name is [your name]'.";
       }
     }
+    // Toggle multi-agent system
+    else if (userMessage.toLowerCase().includes("use multi agent") || 
+             userMessage.toLowerCase().includes("enable agents")) {
+      setUseMultiAgent(true);
+      response = "I've enabled my multi-agent system. I'll now process your requests using my network of specialized agents.";
+    }
+    else if (userMessage.toLowerCase().includes("disable multi agent") || 
+             userMessage.toLowerCase().includes("disable agents")) {
+      setUseMultiAgent(false);
+      response = "I've disabled my multi-agent system. I'll now process your requests using my standard logic.";
+    }
     // Personalized responses with owner name when appropriate
     else if (userMessage.toLowerCase().includes('hello') || userMessage.toLowerCase().includes('hi')) {
       const ownerProfile = loadOwnerProfile();
@@ -263,27 +365,17 @@ const SpeechRecognition = () => {
   };
   
   const speakResponse = (text: string) => {
-    if ('speechSynthesis' in window) {
-      setIsPlaying(true);
-      
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1;
-      utterance.pitch = 1;
-      utterance.volume = 1;
-      
-      utterance.onend = () => {
-        setIsPlaying(false);
-      };
-      
-      window.speechSynthesis.speak(utterance);
-    }
+    // Use our TTS utility
+    tts.speak(text, {
+      rate: 1,
+      pitch: 1,
+      volume: 1
+    });
   };
   
   const stopSpeaking = () => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      setIsPlaying(false);
-    }
+    tts.stop();
+    setIsPlaying(false);
   };
 
   return (

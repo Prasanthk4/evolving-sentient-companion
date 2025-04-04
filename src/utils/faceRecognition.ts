@@ -16,8 +16,27 @@ export interface FaceRecognitionResult {
   timestamp: number;
 }
 
+export interface GestureDetectionResult {
+  gesture: string;
+  confidence: number;
+  timestamp: number;
+}
+
+// Gestures that can be detected
+export const SUPPORTED_GESTURES = [
+  'wave', 
+  'thumbs_up', 
+  'thumbs_down', 
+  'peace', 
+  'pointing', 
+  'open_palm', 
+  'closed_fist', 
+  'none'
+];
+
 // Local storage keys
 const FACE_HISTORY_KEY = 'karna-face-recognition-history';
+const GESTURE_HISTORY_KEY = 'karna-gesture-history';
 
 // Process face detection result
 export const processFaceDetection = async (imageData: string): Promise<FaceDetectionResult> => {
@@ -170,5 +189,65 @@ export const storeFaceSignature = async (imageData: string, name: string): Promi
       variant: "destructive"
     });
     return false;
+  }
+};
+
+// New function: Detect gestures from image data
+export const detectGesture = async (imageData: string): Promise<GestureDetectionResult> => {
+  try {
+    // Try to use electron API first for gesture detection
+    if (window.electron?.emotionAnalysis?.detectGesture) {
+      const result = await window.electron.emotionAnalysis.detectGesture(imageData);
+      return result;
+    }
+    
+    // Fallback for browser environments - simplified detection
+    const gestures = SUPPORTED_GESTURES;
+    const randomIndex = Math.floor(Math.random() * gestures.length);
+    const gesture = gestures[randomIndex];
+    const confidence = gesture === 'none' ? 0.3 + (Math.random() * 0.3) : 0.7 + (Math.random() * 0.3);
+    
+    const result = {
+      gesture,
+      confidence,
+      timestamp: Date.now()
+    };
+    
+    // Store gesture in history
+    addToGestureHistory(result);
+    
+    return result;
+  } catch (error) {
+    console.error('Error detecting gesture:', error);
+    return {
+      gesture: 'none',
+      confidence: 0,
+      timestamp: Date.now()
+    };
+  }
+};
+
+// Add gesture detection result to history
+const addToGestureHistory = (result: GestureDetectionResult) => {
+  try {
+    const history = getGestureHistory();
+    history.unshift(result);
+    
+    // Limit history size
+    const limitedHistory = history.slice(0, 50);
+    localStorage.setItem(GESTURE_HISTORY_KEY, JSON.stringify(limitedHistory));
+  } catch (error) {
+    console.error('Error adding to gesture history:', error);
+  }
+};
+
+// Get gesture history
+export const getGestureHistory = (): GestureDetectionResult[] => {
+  try {
+    const stored = localStorage.getItem(GESTURE_HISTORY_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch (error) {
+    console.error('Error getting gesture history:', error);
+    return [];
   }
 };

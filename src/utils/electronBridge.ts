@@ -1,7 +1,10 @@
+
 /**
  * This file provides a compatibility layer for Electron's API when running in a browser environment
  */
 import { FeedbackData } from '@/types/electron';
+import { getTTSHistory } from '@/utils/textToSpeech';
+import { KnowledgeEntry } from '@/utils/knowledgeExpansion';
 
 // Mock implementation of the Electron API for browser environments
 const createMockElectronAPI = (): Window['electron'] => {
@@ -216,6 +219,101 @@ const createMockElectronAPI = (): Window['electron'] => {
           averageScore: 0,
           totalFeedback: 0,
           improvementRate: 0
+        };
+      }
+    },
+    // New APIs
+    speechToText: {
+      transcribeAudio: async (audioData) => {
+        console.log('Mock transcribe audio with Whisper');
+        // Simulate transcription
+        return {
+          transcript: "This is a mock transcription of the audio data.",
+          confidence: 0.85
+        };
+      },
+      startListening: async () => {
+        console.log('Mock start listening');
+        return true;
+      },
+      stopListening: async () => {
+        console.log('Mock stop listening');
+        return true;
+      }
+    },
+    textToSpeech: {
+      speak: async (text, options) => {
+        console.log('Mock TTS speak:', text, options);
+        
+        // Use browser's speech synthesis if available
+        if ('speechSynthesis' in window) {
+          const utterance = new SpeechSynthesisUtterance(text);
+          
+          if (options) {
+            if (options.rate) utterance.rate = options.rate;
+            if (options.pitch) utterance.pitch = options.pitch;
+            if (options.volume) utterance.volume = options.volume;
+          }
+          
+          window.speechSynthesis.speak(utterance);
+          
+          // Add to TTS history
+          const ttsHistory = getTTSHistory();
+          ttsHistory.unshift({
+            text,
+            duration: text.length * 60, // Rough estimate: 60ms per character
+            timestamp: Date.now()
+          });
+          localStorage.setItem('karna-tts-history', JSON.stringify(ttsHistory.slice(0, 50)));
+        }
+        
+        return true;
+      },
+      getVoices: async () => {
+        console.log('Mock get TTS voices');
+        return ['Daniel', 'Karen', 'Samantha', 'Thomas'];
+      }
+    },
+    knowledgeExpansion: {
+      fetchWikipedia: async (topic) => {
+        console.log('Mock fetch from Wikipedia:', topic);
+        
+        // Simulate a Wikipedia response
+        const entry: KnowledgeEntry = {
+          id: `wiki-${Date.now()}`,
+          title: topic,
+          content: `This is mock Wikipedia content about ${topic}. In a real implementation, this would be actual content from Wikipedia.`,
+          source: 'Wikipedia',
+          sourceUrl: `https://en.wikipedia.org/wiki/${topic.replace(' ', '_')}`,
+          tags: [topic],
+          confidence: 0.9,
+          timestamp: Date.now()
+        };
+        
+        return entry;
+      },
+      fetchNews: async (query) => {
+        console.log('Mock fetch news:', query);
+        
+        // Simulate news articles
+        return [
+          {
+            title: `Latest news about ${query}`,
+            content: `This is mock news content about ${query}.`,
+            source: 'Mock News API',
+            url: 'https://example.com/news',
+            publishedAt: new Date().toISOString()
+          }
+        ];
+      },
+      scrapeWebsite: async (url) => {
+        console.log('Mock scrape website:', url);
+        
+        // Simulate scraped content
+        return {
+          title: 'Mock Website Title',
+          content: 'This is mock scraped content from the website.',
+          links: ['https://example.com/page1', 'https://example.com/page2']
         };
       }
     }
