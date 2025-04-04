@@ -1,4 +1,3 @@
-
 import { toast } from "@/components/ui/use-toast";
 import { loadOwnerProfile, updateFaceSignature } from "@/utils/memoryManager";
 
@@ -155,17 +154,14 @@ export const storeFaceSignature = async (imageData: string, name: string): Promi
     const signature = Date.now().toString();
     
     // Update the owner profile with the face signature
-    const success = updateFaceSignature(signature);
+    updateFaceSignature(signature);
     
-    if (success) {
-      toast({
-        title: "Face Recognition Set",
-        description: `I've saved your face signature, ${name}.`
-      });
-      return true;
-    }
-    
-    return false;
+    // Since updateFaceSignature doesn't return a value, we'll just consider it successful
+    toast({
+      title: "Face Recognition Set",
+      description: `I've saved your face signature, ${name}.`
+    });
+    return true;
   } catch (error) {
     console.error('Error storing face signature:', error);
     toast({
