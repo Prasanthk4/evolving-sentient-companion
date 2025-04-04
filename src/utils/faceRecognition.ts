@@ -155,9 +155,9 @@ export const storeFaceSignature = async (imageData: string, name: string): Promi
     const signature = Date.now().toString();
     
     // Update the owner profile with the face signature
-    const updated = updateFaceSignature(signature);
+    const success = updateFaceSignature(signature);
     
-    if (updated) {
+    if (success) {
       toast({
         title: "Face Recognition Set",
         description: `I've saved your face signature, ${name}.`
