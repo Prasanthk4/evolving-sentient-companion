@@ -1,4 +1,5 @@
 
+
 interface OllamaRequest {
   id: string;
   prompt: string;
@@ -58,6 +59,7 @@ interface EmotionAnalysisResult {
     disgusted: number;
   };
   confidence: number;
+  faceDetected?: boolean;
   timestamp: number;
 }
 

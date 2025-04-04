@@ -129,6 +129,10 @@ const createMockElectronAPI = (): Window['electron'] => {
       analyzeFrame: async (imageData) => {
         console.log('Mock analyze emotion from frame');
         // Simulate emotion analysis result
+        // Generate random emotion data with face detection confidence
+        const faceDetected = Math.random() > 0.3; // 70% chance of detecting a face
+        const confidence = faceDetected ? 0.7 + (Math.random() * 0.3) : 0.2 + (Math.random() * 0.3);
+        
         return {
           dominant: ['neutral', 'happy', 'surprised'][Math.floor(Math.random() * 3)],
           emotions: {
@@ -140,7 +144,8 @@ const createMockElectronAPI = (): Window['electron'] => {
             fearful: Math.random() * 0.1,
             disgusted: Math.random() * 0.05
           },
-          confidence: 0.7 + (Math.random() * 0.3),
+          confidence: confidence,
+          faceDetected: faceDetected,
           timestamp: Date.now()
         };
       },
