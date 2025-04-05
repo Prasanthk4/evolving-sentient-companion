@@ -1,3 +1,4 @@
+
 interface Window {
   SpeechRecognition?: new () => SpeechRecognition;
   webkitSpeechRecognition?: new () => SpeechRecognition;
@@ -73,6 +74,12 @@ interface Window {
       applyChange: (modification: any) => Promise<boolean>;
       suggestImprovement: (code: string, requirements: string) => Promise<string>;
       analyzeCode?: (filePath: string) => Promise<string>;
+    };
+    
+    // Add memory property
+    memory?: {
+      save: (data: any) => Promise<any>;
+      load: () => Promise<any>;
     };
     
     // New features

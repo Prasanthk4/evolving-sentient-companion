@@ -55,27 +55,27 @@ const createMockElectronAPI = (): Window['electron'] => {
       }
     },
     memory: {
-      save: (data) => {
+      save: async (data) => {
         console.log('Mock save to memory:', data);
         try {
           localStorage.setItem('karna-memory', JSON.stringify(data));
-          return Promise.resolve({ success: true });
+          return { success: true };
         } catch (error) {
           console.error('Error saving to localStorage:', error);
-          return Promise.resolve({ success: false, error: String(error) });
+          return { success: false, error: String(error) };
         }
       },
-      load: () => {
+      load: async () => {
         console.log('Mock load from memory');
         try {
           const data = localStorage.getItem('karna-memory');
-          return Promise.resolve({ 
+          return { 
             success: true, 
             data: data ? JSON.parse(data) : null 
-          });
+          };
         } catch (error) {
           console.error('Error loading from localStorage:', error);
-          return Promise.resolve({ success: false, error: String(error) });
+          return { success: false, error: String(error) };
         }
       }
     },

@@ -74,13 +74,13 @@ Provide a clear, step-by-step analysis if the query requires reasoning.
           const thinkerStep = context.processingSteps.find(step => step.agentId === 'thinker');
           const baseAnalysis = {
             type: "initial",
-            content: "",
+            content: thinkerStep?.output || input,
             confidence: 0.5
           };
           
           const prompt = `As a personality enhancement agent, make this response more engaging and personable:
           
-Base content: ${baseAnalysis.content || input}
+Base content: ${baseAnalysis.content}
 
 Add appropriate humor, empathy, or conversational elements while preserving the main message.
 User's current detected emotion: ${context.currentEmotion || 'unknown'}
@@ -92,7 +92,7 @@ Make the response sound more human and less robotic.`;
           return response.text;
         } catch (error) {
           console.error('Personality agent error:', error);
-          return baseAnalysis.content || "I'll try to be more engaging next time.";
+          return input;
         }
       }
     });
