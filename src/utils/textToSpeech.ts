@@ -1,4 +1,3 @@
-
 import { toast } from "@/components/ui/use-toast";
 
 // Types for text-to-speech
@@ -112,6 +111,10 @@ export class KarnaTextToSpeech {
     utterance.pitch = options.pitch || 1;
     utterance.volume = options.volume || 1;
     
+    // Calculate estimated duration (browsers don't provide duration directly)
+    // Rough estimate: 60ms per character, adjusted by rate
+    const estimatedDuration = Math.ceil((text.length * 60) / (utterance.rate || 1));
+    
     // Set callbacks
     utterance.onstart = () => {
       this.isSpeaking = true;
@@ -127,7 +130,7 @@ export class KarnaTextToSpeech {
       // Create a result for history
       const result: TTSResult = {
         text,
-        duration: utterance.duration || (text.length * 60),
+        duration: estimatedDuration,
         timestamp: Date.now()
       };
       

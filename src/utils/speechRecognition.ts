@@ -1,5 +1,30 @@
-
 import { toast } from "@/components/ui/use-toast";
+
+// Extend the global Window interface
+interface SpeechRecognitionInterface extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start(): void;
+  stop(): void;
+  onresult: (event: SpeechRecognitionEventInterface) => void;
+  onend: () => void;
+  onerror: (event: any) => void;
+}
+
+// Define the SpeechRecognitionEvent interface
+interface SpeechRecognitionEventInterface {
+  results: {
+    length: number;
+    [index: number]: {
+      isFinal: boolean;
+      [index: number]: {
+        transcript: string;
+        confidence: number;
+      };
+    };
+  };
+}
 
 // Types for speech recognition
 export interface SpeechRecognitionResult {
@@ -20,7 +45,7 @@ const SPEECH_HISTORY_KEY = 'karna-speech-recognition-history';
 
 // Speech recognition class
 export class KarnaSpeechRecognition {
-  private recognition: SpeechRecognition | null = null;
+  private recognition: SpeechRecognitionInterface | null = null;
   private isListening: boolean = false;
   private onResultCallback: ((result: SpeechRecognitionResult) => void) | null = null;
   private onEndCallback: (() => void) | null = null;
@@ -33,7 +58,7 @@ export class KarnaSpeechRecognition {
                                   (window as any).webkitSpeechRecognition;
       
       if (SpeechRecognitionAPI) {
-        this.recognition = new SpeechRecognitionAPI();
+        this.recognition = new SpeechRecognitionAPI() as SpeechRecognitionInterface;
         this.recognition.continuous = options.continuous ?? true;
         this.recognition.interimResults = options.interimResults ?? true;
         this.recognition.lang = options.language ?? 'en-US';
@@ -109,7 +134,7 @@ export class KarnaSpeechRecognition {
   }
   
   // Handle recognition result
-  private handleResult(event: SpeechRecognitionEvent): void {
+  private handleResult(event: SpeechRecognitionEventInterface): void {
     if (!event.results.length) return;
     
     const result = event.results[event.results.length - 1];
