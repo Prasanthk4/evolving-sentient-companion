@@ -1,157 +1,107 @@
 
-interface OllamaRequest {
-  id: string;
-  prompt: string;
-  model?: string;
-}
-
-interface OllamaElectronAPI {
-  query: (request: OllamaRequest) => void;
-  on: (channel: string, callback: (event: any, data: any) => void) => void;
-  off: (channel: string, callback: (event: any, data: any) => void) => void;
-  getAvailableModels: () => Promise<string[]>;
-}
-
-interface GeminiRequest {
-  id: string;
-  prompt: string;
-}
-
-interface GeminiElectronAPI {
-  query: (request: GeminiRequest) => void;
-  on: (channel: string, callback: (event: any, data: any) => void) => void;
-  off: (channel: string, callback: (event: any, data: any) => void) => void;
-}
-
-interface AutomationResponse {
-  id: string;
-  response: any;
-  error?: string;
-}
-
-interface CodeModification {
-  filePath: string;
-  originalCode: string;
-  modifiedCode: string;
-  purpose: string;
-  timestamp: number;
-  appliedBy: 'user' | 'ai';
-  approved: boolean;
-}
-
-interface SelfModificationAPI {
-  analyzeCode: (filePath: string) => Promise<string>;
-  suggestImprovement: (code: string, requirements: string) => Promise<string>;
-  applyChange: (modification: CodeModification) => Promise<boolean>;
-  getModificationHistory: () => Promise<CodeModification[]>;
-}
-
-interface EmotionAnalysisResult {
-  dominant: string;
-  emotions: {
-    happy: number;
-    sad: number;
-    angry: number;
-    surprised: number;
-    neutral: number;
-    fearful: number;
-    disgusted: number;
+export interface ElectronBridge {
+  // System monitoring
+  systemInfo?: {
+    getCpuUsage: () => Promise<number>;
+    getMemoryUsage: () => Promise<number>;
+    getSystemUptime: () => Promise<number>;
+    getBatteryLevel: () => Promise<number>;
   };
-  confidence: number;
-  faceDetected?: boolean;
-  timestamp: number;
-}
-
-interface GestureDetectionResult {
-  gesture: string;
-  confidence: number;
-  timestamp: number;
-}
-
-interface EmotionAnalysisAPI {
-  analyzeFrame: (imageData: string) => Promise<EmotionAnalysisResult>;
-  getEmotionHistory: () => Promise<EmotionAnalysisResult[]>;
-  detectGesture: (imageData: string) => Promise<GestureDetectionResult>;
-}
-
-interface SpeechToTextAPI {
-  transcribeAudio: (audioData: Blob) => Promise<{
-    transcript: string;
-    confidence: number;
-  }>;
-  startListening: () => Promise<boolean>;
-  stopListening: () => Promise<boolean>;
-}
-
-interface TextToSpeechAPI {
-  speak: (text: string, options?: {
-    voice?: string;
-    rate?: number;
-    pitch?: number;
-    volume?: number;
-  }) => Promise<boolean>;
-  getVoices: () => Promise<string[]>;
-}
-
-interface KnowledgeExpansionAPI {
-  fetchWikipedia: (topic: string) => Promise<any>;
-  fetchNews: (query: string) => Promise<any[]>;
-  scrapeWebsite: (url: string) => Promise<{
-    title: string;
-    content: string;
-    links: string[];
-  }>;
+  
+  // File operations
+  fileSystem?: {
+    readFile: (filePath: string) => Promise<string>;
+    writeFile: (filePath: string, content: string) => Promise<boolean>;
+    selectFile: (options?: any) => Promise<string | null>;
+    selectDirectory: () => Promise<string | null>;
+  };
+  
+  // Speech recognition and synthesis
+  speak?: (text: string) => void;
+  speechToText?: {
+    startListening: () => Promise<boolean>;
+    stopListening: () => Promise<boolean>;
+    transcribeAudio: (audioData: Blob, options?: any) => Promise<any>;
+  };
+  
+  // AI and ML features
+  aiProcessor?: {
+    processWithLLM: (prompt: string, options?: any) => Promise<string>;
+    generateImage: (prompt: string, options?: any) => Promise<string>;
+    summarizeText: (text: string) => Promise<string>;
+  };
+  
+  // Emotion and face analysis
+  emotionAnalysis?: {
+    analyzeFrame: (imageData: string) => Promise<any>;
+    detectGesture: (imageData: string) => Promise<any>;
+    getEmotionHistory: () => Promise<any[]>;
+  };
+  
+  // Reinforcement learning and feedback
+  reinforcementLearning?: {
+    submitFeedback: (feedback: FeedbackData) => Promise<boolean>;
+    getFeedbackHistory: () => Promise<FeedbackData[]>;
+    getPerformanceMetrics: () => Promise<{
+      averageScore: number;
+      totalFeedback: number;
+      improvementRate: number;
+    }>;
+    getImprovedResponse: (prompt: string, context: string) => Promise<string>;
+  };
+  
+  // Self modification and improvement
+  selfModify?: {
+    getModificationHistory: () => Promise<any[]>;
+    applyChange: (modification: any) => Promise<boolean>;
+    suggestImprovement: (code: string, requirements: string) => Promise<string>;
+  };
+  
+  // NEW FEATURES
+  
+  // ElevenLabs integration
+  elevenlabs?: {
+    textToSpeech: (text: string, options?: any) => Promise<string>;
+    getAvailableVoices: () => Promise<any[]>;
+    setApiKey: (key: string) => Promise<boolean>;
+  };
+  
+  // Whisper AI integration
+  whisperAI?: {
+    transcribeFile: (filePath: string, options?: any) => Promise<any>;
+    transcribeAudio: (audioData: Blob, options?: any) => Promise<any>;
+    isAvailable: () => Promise<boolean>;
+  };
+  
+  // Knowledge expansion
+  knowledgeExpansion?: {
+    searchWikipedia: (topic: string) => Promise<any>;
+    searchWeb: (query: string) => Promise<any>;
+    saveKnowledgeEntry: (entry: any) => Promise<boolean>;
+  };
+  
+  // Gesture recognition
+  gestureRecognition?: {
+    detectGesture: (imageData: string) => Promise<any>;
+    trainGesture: (name: string, samples: string[]) => Promise<boolean>;
+    getSupportedGestures: () => Promise<string[]>;
+  };
+  
+  // Multi-agent system
+  multiAgent?: {
+    processWithAgents: (message: string, context?: any) => Promise<string>;
+    getAgentStatus: () => Promise<any>;
+    configureAgents: (config: any) => Promise<boolean>;
+  };
 }
 
 export interface FeedbackData {
   id?: string;
-  timestamp: number;
   prompt: string;
   response: string;
-  score: number; // 1-5 rating
+  score: number;
   feedback?: string;
-  category?: 'accuracy' | 'helpfulness' | 'safety' | 'other';
-  responseId?: string;
   context?: string;
   emotion?: string;
+  timestamp: number;
 }
-
-interface ReinforcementLearningAPI {
-  submitFeedback: (feedback: FeedbackData) => Promise<boolean>;
-  getFeedbackHistory: () => Promise<FeedbackData[]>;
-  getImprovedResponse: (prompt: string, context: string) => Promise<string>;
-  getPerformanceMetrics: () => Promise<{
-    averageScore: number;
-    totalFeedback: number;
-    improvementRate: number;
-  }>;
-}
-
-interface ElectronAPI {
-  ollama: OllamaElectronAPI;
-  gemini: GeminiElectronAPI;
-  systemStats: {
-    subscribe: (callback: (stats: any) => void) => (() => void);
-  };
-  sendMessage?: (channel: string, data: any) => void;
-  receive?: (channel: string, func: (...args: any[]) => void) => void;
-  speak?: (text: string) => void;
-  memory?: {
-    save: (data: any) => Promise<any>;
-    load: () => Promise<any>;
-  };
-  selfModify?: SelfModificationAPI;
-  emotionAnalysis?: EmotionAnalysisAPI;
-  reinforcementLearning?: ReinforcementLearningAPI;
-  speechToText?: SpeechToTextAPI;
-  textToSpeech?: TextToSpeechAPI;
-  knowledgeExpansion?: KnowledgeExpansionAPI;
-}
-
-declare global {
-  interface Window {
-    electron: ElectronAPI;
-  }
-}
-
-export {};

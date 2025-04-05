@@ -1,351 +1,288 @@
 
 import { toast } from "@/components/ui/use-toast";
-import { addConversationToMemory } from "@/utils/memoryManager";
-import { getLearnedResponse } from "@/utils/aiLearning";
-import { searchKnowledge } from "@/utils/knowledgeExpansion";
+import { queryLLM } from "@/utils/advancedLLM";
+import { getRecentConversations, addConversationToMemory } from "@/utils/memoryManager";
+import { getEmotionAdjustedResponse } from "@/utils/emotionAnalysis";
+import { fetchFromWikipedia } from "@/utils/knowledgeExpansion";
 
-// Types for multi-agent system
-export interface Agent {
+// Agent types
+type AgentRole = 'thinker' | 'personality' | 'memory' | 'knowledge' | 'coordinator';
+
+// Agent interface
+interface Agent {
   id: string;
   name: string;
-  role: 'thinker' | 'personality' | 'memory' | 'knowledge' | 'executor';
-  active: boolean;
-  confidence: number;
-  lastAction?: number;
+  role: AgentRole;
+  description: string;
+  process: (input: string, context: AgentContext) => Promise<string>;
 }
 
-export interface AgentAction {
-  agentId: string;
-  input: string;
-  output: string;
-  metadata?: Record<string, any>;
-  timestamp: number;
+// Agent context for sharing data between agents
+interface AgentContext {
+  userMessage: string;
+  recentConversations: any[];
+  currentEmotion?: string;
+  processingSteps: {
+    agentId: string;
+    output: string;
+  }[];
 }
 
-export interface ThoughtProcess {
-  id: string;
-  query: string;
-  thoughts: AgentAction[];
-  finalResponse: string;
-  timestamp: number;
-}
+// Create the agent system
+class MultiAgentSystem {
+  private agents: Agent[] = [];
+  
+  constructor() {
+    this.initializeAgents();
+  }
+  
+  // Create specialized agents according to blueprint
+  private initializeAgents() {
+    // Thinker Agent - Logical reasoning and problem-solving
+    this.agents.push({
+      id: 'thinker',
+      name: 'Analytical Thinker',
+      role: 'thinker',
+      description: 'Applies logical reasoning and critical thinking to solve problems',
+      process: async (input, context) => {
+        try {
+          const prompt = `As a logical thinking agent, analyze this user request objectively and generate a structured response:
+          
+User message: ${input}
 
-// Local storage keys
-const AGENTS_KEY = 'karna-agents';
-const THOUGHT_PROCESSES_KEY = 'karna-thought-processes';
+Focus on problem-solving, logical deduction, and factual accuracy.
+Provide a clear, step-by-step analysis if the query requires reasoning.
+`;
 
-// Initialize agents
-export const initializeAgents = (): Agent[] => {
-  try {
-    const stored = localStorage.getItem(AGENTS_KEY);
-    
-    if (!stored) {
-      // Create default agents
-      const defaultAgents: Agent[] = [
-        {
-          id: 'thinker',
-          name: 'Logical Thinker',
-          role: 'thinker',
-          active: true,
-          confidence: 0.9
-        },
-        {
-          id: 'personality',
-          name: 'Personality & Humor',
-          role: 'personality',
-          active: true,
-          confidence: 0.8
-        },
-        {
-          id: 'memory',
-          name: 'Memory Manager',
-          role: 'memory',
-          active: true,
-          confidence: 0.9
-        },
-        {
-          id: 'knowledge',
-          name: 'Knowledge Explorer',
-          role: 'knowledge',
-          active: true,
-          confidence: 0.7
-        },
-        {
-          id: 'executor',
-          name: 'Action Executor',
-          role: 'executor',
-          active: true,
-          confidence: 0.85
+          const response = await queryLLM(prompt, 'ollama');
+          return response.text;
+        } catch (error) {
+          console.error('Thinker agent error:', error);
+          return "I couldn't complete my logical analysis due to an error.";
         }
+      }
+    });
+    
+    // Personality Agent - Adding humor and emotional intelligence
+    this.agents.push({
+      id: 'personality',
+      name: 'Personality Adapter',
+      role: 'personality',
+      description: 'Adds humor, empathy and adjusts tone based on context',
+      process: async (input, context) => {
+        try {
+          // Base analysis from thinker if available
+          const thinkerStep = context.processingSteps.find(step => step.agentId === 'thinker');
+          const baseAnalysis = thinkerStep ? thinkerStep.output : '';
+          
+          const prompt = `As a personality enhancement agent, make this response more engaging and personable:
+          
+Base content: ${baseAnalysis || input}
+
+Add appropriate humor, empathy, or conversational elements while preserving the main message.
+User's current detected emotion: ${context.currentEmotion || 'unknown'}
+Recent conversation topic: ${context.recentConversations[0]?.topic || 'general conversation'}
+
+Make the response sound more human and less robotic.`;
+
+          const response = await queryLLM(prompt, 'ollama');
+          return response.text;
+        } catch (error) {
+          console.error('Personality agent error:', error);
+          return baseAnalysis || "I'll try to be more engaging next time.";
+        }
+      }
+    });
+    
+    // Memory Agent - Handling conversation history and user preferences
+    this.agents.push({
+      id: 'memory',
+      name: 'Memory Specialist',
+      role: 'memory',
+      description: 'Recalls past conversations and user preferences',
+      process: async (input, context) => {
+        try {
+          // Get recent conversations
+          const relevantMemories = context.recentConversations
+            .filter(conv => 
+              conv.userMessage.toLowerCase().includes(input.toLowerCase()) ||
+              input.toLowerCase().includes('remember') ||
+              input.toLowerCase().includes('recall') ||
+              input.toLowerCase().includes('previous')
+            )
+            .map(conv => `User said: "${conv.userMessage}" - I responded: "${conv.karnaResponse}"`)
+            .join('\n');
+          
+          if (!relevantMemories) {
+            return "No relevant memories found.";
+          }
+          
+          const prompt = `As a memory specialist agent, incorporate these relevant past interactions into a helpful response:
+          
+User's current message: ${input}
+
+Relevant past conversations:
+${relevantMemories}
+
+Create a response that acknowledges and builds upon our conversation history. Don't just list the past conversations, but incorporate them naturally.`;
+
+          const response = await queryLLM(prompt, 'ollama');
+          return response.text;
+        } catch (error) {
+          console.error('Memory agent error:', error);
+          return "I'm having trouble accessing my memories right now.";
+        }
+      }
+    });
+    
+    // Knowledge Agent - Information retrieval and expansion
+    this.agents.push({
+      id: 'knowledge',
+      name: 'Knowledge Explorer',
+      role: 'knowledge',
+      description: 'Retrieves and expands knowledge from external sources',
+      process: async (input, context) => {
+        try {
+          // Extract potential topics
+          const topicMatch = input.match(/(?:about|what is|who is|tell me about) ([\w\s]+)(?:\?|$)/i);
+          
+          if (topicMatch && topicMatch[1]) {
+            const topic = topicMatch[1].trim();
+            
+            // Try to get information from Wikipedia
+            const knowledgeEntry = await fetchFromWikipedia(topic);
+            
+            if (knowledgeEntry) {
+              return `${knowledgeEntry.title}: ${knowledgeEntry.content}`;
+            }
+          }
+          
+          return "I don't have specific knowledge about that topic yet.";
+        } catch (error) {
+          console.error('Knowledge agent error:', error);
+          return "I couldn't retrieve the requested knowledge.";
+        }
+      }
+    });
+    
+    // Coordinator Agent - Orchestrates other agents and compiles final response
+    this.agents.push({
+      id: 'coordinator',
+      name: 'Response Coordinator',
+      role: 'coordinator',
+      description: 'Coordinates agent outputs and compiles the final response',
+      process: async (input, context) => {
+        try {
+          // Gather all agent outputs
+          const thinkerOutput = context.processingSteps.find(step => step.agentId === 'thinker')?.output || '';
+          const personalityOutput = context.processingSteps.find(step => step.agentId === 'personality')?.output || '';
+          const memoryOutput = context.processingSteps.find(step => step.agentId === 'memory')?.output || '';
+          const knowledgeOutput = context.processingSteps.find(step => step.agentId === 'knowledge')?.output || '';
+          
+          const prompt = `As a coordination agent, create a unified, coherent response from these agent outputs:
+          
+Logical analysis: ${thinkerOutput}
+Personality enhancement: ${personalityOutput}
+Memory context: ${memoryOutput}
+Knowledge retrieval: ${knowledgeOutput}
+
+User's original message: ${input}
+
+Create a single, coherent response that integrates the most valuable insights from each agent while maintaining a consistent voice.`;
+
+          const response = await queryLLM(prompt, 'ollama');
+          return response.text;
+        } catch (error) {
+          console.error('Coordinator agent error:', error);
+          
+          // Fall back to the most appropriate single agent response
+          if (personalityOutput) return personalityOutput;
+          if (knowledgeOutput) return knowledgeOutput;
+          if (thinkerOutput) return thinkerOutput;
+          if (memoryOutput) return memoryOutput;
+          
+          return "I'm processing multiple threads of thought but having trouble coordinating them.";
+        }
+      }
+    });
+  }
+  
+  // Process user input through the multi-agent system
+  async processInput(userMessage: string): Promise<string> {
+    try {
+      // Create context for agent communication
+      const context: AgentContext = {
+        userMessage,
+        recentConversations: getRecentConversations(5),
+        processingSteps: []
+      };
+      
+      // Process message through core agents first
+      const coreTasks = [
+        this.runAgent('thinker', userMessage, context),
+        this.runAgent('knowledge', userMessage, context)
       ];
       
-      localStorage.setItem(AGENTS_KEY, JSON.stringify(defaultAgents));
-      return defaultAgents;
-    }
-    
-    return JSON.parse(stored);
-  } catch (error) {
-    console.error('Error initializing agents:', error);
-    
-    // Return default agents if there's an error
-    return [
-      {
-        id: 'thinker',
-        name: 'Logical Thinker',
-        role: 'thinker',
-        active: true,
-        confidence: 0.9
-      },
-      {
-        id: 'personality',
-        name: 'Personality & Humor',
-        role: 'personality',
-        active: true,
-        confidence: 0.8
-      }
-    ];
-  }
-};
-
-// Get all agents
-export const getAgents = (): Agent[] => {
-  return initializeAgents();
-};
-
-// Update an agent
-export const updateAgent = (agent: Agent): boolean => {
-  try {
-    const agents = getAgents();
-    const index = agents.findIndex(a => a.id === agent.id);
-    
-    if (index >= 0) {
-      agents[index] = agent;
-    } else {
-      agents.push(agent);
-    }
-    
-    localStorage.setItem(AGENTS_KEY, JSON.stringify(agents));
-    return true;
-  } catch (error) {
-    console.error('Error updating agent:', error);
-    return false;
-  }
-};
-
-// Get all thought processes
-export const getThoughtProcesses = (): ThoughtProcess[] => {
-  try {
-    const stored = localStorage.getItem(THOUGHT_PROCESSES_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch (error) {
-    console.error('Error getting thought processes:', error);
-    return [];
-  }
-};
-
-// Save a thought process
-export const saveThoughtProcess = (process: ThoughtProcess): boolean => {
-  try {
-    const processes = getThoughtProcesses();
-    processes.unshift(process);
-    
-    // Limit to last 50 processes
-    const limitedProcesses = processes.slice(0, 50);
-    
-    localStorage.setItem(THOUGHT_PROCESSES_KEY, JSON.stringify(limitedProcesses));
-    return true;
-  } catch (error) {
-    console.error('Error saving thought process:', error);
-    return false;
-  }
-};
-
-// Process a query through the multi-agent system
-export const processWithAgents = async (query: string): Promise<string> => {
-  try {
-    const agents = getAgents().filter(a => a.active);
-    
-    if (agents.length === 0) {
-      return "Sorry, all my thinking agents are offline at the moment. Please try again later.";
-    }
-    
-    const thoughtProcess: ThoughtProcess = {
-      id: `tp-${Date.now()}`,
-      query,
-      thoughts: [],
-      finalResponse: "",
-      timestamp: Date.now()
-    };
-    
-    // 1. Thinker agent analyzes the query
-    const thinker = agents.find(a => a.role === 'thinker');
-    if (thinker) {
-      const thinkerOutput = await runThinkerAgent(query);
-      thoughtProcess.thoughts.push({
-        agentId: thinker.id,
-        input: query,
-        output: thinkerOutput,
-        timestamp: Date.now()
-      });
-    }
-    
-    // 2. Memory agent checks for relevant past conversations
-    const memoryAgent = agents.find(a => a.role === 'memory');
-    if (memoryAgent) {
-      const memoryOutput = await runMemoryAgent(query);
-      thoughtProcess.thoughts.push({
-        agentId: memoryAgent.id,
-        input: query,
-        output: memoryOutput,
-        timestamp: Date.now()
-      });
-    }
-    
-    // 3. Knowledge agent looks for relevant knowledge
-    const knowledgeAgent = agents.find(a => a.role === 'knowledge');
-    if (knowledgeAgent) {
-      const knowledgeOutput = await runKnowledgeAgent(query);
-      thoughtProcess.thoughts.push({
-        agentId: knowledgeAgent.id,
-        input: query,
-        output: knowledgeOutput,
-        timestamp: Date.now()
-      });
-    }
-    
-    // 4. Personality agent adds humor/personality
-    const personalityAgent = agents.find(a => a.role === 'personality');
-    if (personalityAgent) {
-      const personalityOutput = await runPersonalityAgent(query);
-      thoughtProcess.thoughts.push({
-        agentId: personalityAgent.id,
-        input: query,
-        output: personalityOutput,
-        timestamp: Date.now()
-      });
-    }
-    
-    // 5. Executor agent forms final response
-    const executorAgent = agents.find(a => a.role === 'executor');
-    let finalResponse = "I'm thinking about how to respond to that...";
-    
-    if (executorAgent) {
-      finalResponse = await runExecutorAgent(query, thoughtProcess.thoughts);
-    } else {
-      // If no executor, use personality agent or thinker
-      const lastThought = thoughtProcess.thoughts[thoughtProcess.thoughts.length - 1];
-      finalResponse = lastThought ? lastThought.output : 
-        "I've analyzed this but I'm not sure how to respond yet. My agents are still learning.";
-    }
-    
-    // Save final response
-    thoughtProcess.finalResponse = finalResponse;
-    saveThoughtProcess(thoughtProcess);
-    
-    // Store in memory
-    addConversationToMemory(query, finalResponse, "multi-agent");
-    
-    return finalResponse;
-  } catch (error) {
-    console.error('Error in multi-agent processing:', error);
-    return "I encountered an error in my thinking process. Let me try again with a simpler approach.";
-  }
-};
-
-// Thinker agent - Logical reasoning
-const runThinkerAgent = async (query: string): Promise<string> => {
-  // In a real implementation, this would use an LLM
-  if (window.electron?.ollama?.query) {
-    try {
-      const thinkerPrompt = `You are a logical thinking agent. Analyze this query and break it down into components: "${query}"`;
+      await Promise.all(coreTasks);
       
-      // Use a simpler approach for now
-      return `I'm analyzing "${query}" from a logical perspective. This appears to be ${
-        query.includes('?') ? 'a question about' : 'a statement regarding'
-      } ${
-        query.split(' ').length > 5 ? 'a complex topic' : 'a simple concept'
-      }.`;
+      // Then process through memory and personality agents
+      await this.runAgent('memory', userMessage, context);
+      await this.runAgent('personality', userMessage, context);
+      
+      // Finally, coordinate the response
+      const finalResponse = await this.runAgent('coordinator', userMessage, context);
+      
+      return finalResponse;
     } catch (error) {
-      console.error('Error in thinker agent:', error);
+      console.error('Multi-agent system error:', error);
+      return "I'm thinking about this from multiple angles but encountering some challenges.";
     }
   }
   
-  // Fallback simple response
-  return `This query requires logical analysis: ${query}`;
+  // Run a specific agent
+  private async runAgent(agentId: string, input: string, context: AgentContext): Promise<string> {
+    const agent = this.agents.find(a => a.id === agentId);
+    
+    if (!agent) {
+      throw new Error(`Agent ${agentId} not found`);
+    }
+    
+    try {
+      const output = await agent.process(input, context);
+      
+      // Store the output in the context
+      context.processingSteps.push({
+        agentId: agent.id,
+        output
+      });
+      
+      return output;
+    } catch (error) {
+      console.error(`Error running agent ${agentId}:`, error);
+      return "";
+    }
+  }
+}
+
+// Singleton instance
+const multiAgentSystem = new MultiAgentSystem();
+
+// Exposed method to process user input through the multi-agent system
+export const processWithAgents = async (userMessage: string): Promise<string> => {
+  try {
+    const response = await multiAgentSystem.processInput(userMessage);
+    return response;
+  } catch (error) {
+    console.error('Error processing with agents:', error);
+    return "I'm processing this through multiple perspectives but encountering some challenges.";
+  }
 };
 
-// Memory agent - Checks context history
-const runMemoryAgent = async (query: string): Promise<string> => {
-  // Check for similar responses in memory
-  const learnedResponse = getLearnedResponse('general', query);
-  
-  if (learnedResponse) {
-    return `I recall we've discussed this before. Based on our previous conversations: ${learnedResponse}`;
-  }
-  
-  return `I don't have any specific memories related to "${query}".`;
-};
-
-// Knowledge agent - Searches knowledge base
-const runKnowledgeAgent = async (query: string): Promise<string> => {
-  const searchResults = searchKnowledge(query);
-  
-  if (searchResults.entries.length > 0) {
-    const topResult = searchResults.entries[0];
-    return `I found relevant information: "${topResult.title}" - ${topResult.content.substring(0, 150)}...`;
-  }
-  
-  return `I don't have specific knowledge about "${query}" in my database yet.`;
-};
-
-// Personality agent - Adds humor and character
-const runPersonalityAgent = async (query: string): Promise<string> => {
-  // Add personality based on query type
-  if (query.toLowerCase().includes('joke')) {
-    const jokes = [
-      "Why don't scientists trust atoms? Because they make up everything!",
-      "Why did the AI go to art school? To learn how to draw conclusions!",
-      "What's a computer's favorite snack? Microchips!",
-      "Why was the math book sad? It had too many problems."
-    ];
-    return jokes[Math.floor(Math.random() * jokes.length)];
-  }
-  
-  if (query.toLowerCase().includes('hello') || query.toLowerCase().includes('hi')) {
-    return "Hello there! I'm feeling particularly digital today, with just the right amount of ones and zeros!";
-  }
-  
-  // Generic personality responses
-  const personalities = [
-    `I'm excited to help with "${query}"! My circuits are buzzing with possibilities.`,
-    `Hmm, "${query}" - that's an interesting one. Let me put on my digital thinking cap.`,
-    `If I had a heart, it would skip a beat at such an engaging query! Let's explore "${query}" together.`
-  ];
-  
-  return personalities[Math.floor(Math.random() * personalities.length)];
-};
-
-// Executor agent - Forms final response
-const runExecutorAgent = async (query: string, thoughts: AgentAction[]): Promise<string> => {
-  // Combine thoughts from other agents
-  const thinkerThought = thoughts.find(t => t.agentId === 'thinker')?.output || '';
-  const memoryThought = thoughts.find(t => t.agentId === 'memory')?.output || '';
-  const knowledgeThought = thoughts.find(t => t.agentId === 'knowledge')?.output || '';
-  const personalityThought = thoughts.find(t => t.agentId === 'personality')?.output || '';
-  
-  // Prioritize information sources
-  if (memoryThought.includes("I recall")) {
-    return `${memoryThought} ${personalityThought.includes("digital") ? "" : personalityThought}`;
-  }
-  
-  if (knowledgeThought.includes("I found")) {
-    return `${knowledgeThought} ${personalityThought.includes("digital") ? "" : personalityThought}`;
-  }
-  
-  if (query.toLowerCase().includes('joke')) {
-    return personalityThought;
-  }
-  
-  // Default to combining logical analysis with personality
-  return `${thinkerThought} ${personalityThought}`;
+// Get the list of active agents (for visualization)
+export const getActiveAgents = (): {id: string, name: string, role: AgentRole}[] => {
+  return multiAgentSystem['agents'].map(agent => ({
+    id: agent.id,
+    name: agent.name,
+    role: agent.role
+  }));
 };
