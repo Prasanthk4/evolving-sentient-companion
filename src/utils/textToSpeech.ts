@@ -41,11 +41,31 @@ class TextToSpeech {
     volume: number;
     useElevenLabs: boolean;
   };
+  private onStartCallbacks: ((text: string) => void)[] = [];
+  private onEndCallbacks: ((text: string) => void)[] = [];
   
   constructor() {
     this.settings = { ...defaultSettings };
     this.loadSettings();
     this.initializeVoices();
+  }
+
+  // Event handlers
+  onStart(callback: (text: string) => void): void {
+    this.onStartCallbacks.push(callback);
+  }
+
+  onEnd(callback: (text: string) => void): void {
+    this.onEndCallbacks.push(callback);
+  }
+
+  // Trigger callbacks
+  private triggerStartCallbacks(text: string): void {
+    this.onStartCallbacks.forEach(callback => callback(text));
+  }
+
+  private triggerEndCallbacks(text: string): void {
+    this.onEndCallbacks.forEach(callback => callback(text));
   }
   
   // Initialize voices
@@ -130,15 +150,19 @@ class TextToSpeech {
         pitch: options?.pitch || this.settings.pitch,
         volume: options?.volume || this.settings.volume
       };
+
+      // Trigger start callbacks
+      this.triggerStartCallbacks(text);
+      this.isSpeaking = true;
       
       // Try to use electron bridge first
-      if (window.electron?.textToSpeech?.speak) {
-        const result = await window.electron.textToSpeech.speak(text, opts);
+      if (window.electron?.speak) {
+        window.electron.speak(text);
         
         // Add to history
         this.addToHistory(text, this.estimateSpeechDuration(text, opts.rate));
         
-        return result;
+        return true;
       }
       
       // Use ElevenLabs if enabled and available
@@ -146,7 +170,7 @@ class TextToSpeech {
         // Check if the selected voice is from ElevenLabs
         if (opts.voice && opts.voice.length > 10) {
           // Likely an ElevenLabs voice ID
-          const audioUrl = await elevenLabsTTS.textToSpeech(text, {
+          const audioUrl = await elevenLabsTTS.speak(text, {
             voice_id: opts.voice
           });
           
@@ -158,8 +182,6 @@ class TextToSpeech {
       
       // Fall back to browser's speech synthesis
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        this.isSpeaking = true;
-        
         // Create utterance
         const utterance = new SpeechSynthesisUtterance(text);
         
@@ -179,6 +201,7 @@ class TextToSpeech {
         // Handle speech end
         utterance.onend = () => {
           this.isSpeaking = false;
+          this.triggerEndCallbacks(text);
         };
         
         // Handle speech error
@@ -206,10 +229,11 @@ class TextToSpeech {
   }
   
   // Stop speaking
-  stopSpeaking(): void {
+  stop(): void {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       this.isSpeaking = false;
+      this.triggerEndCallbacks("");
     }
   }
   
@@ -287,9 +311,9 @@ export const getTTSHistory = (): TTSHistoryItem[] => {
 };
 
 // Create a singleton instance
-export const textToSpeech = new TextToSpeech();
+export const tts = new TextToSpeech();
 
 // Utility function for quick text-to-speech
 export const speakText = (text: string, options?: TTSOptions): Promise<boolean> => {
-  return textToSpeech.speak(text, options);
+  return tts.speak(text, options);
 };

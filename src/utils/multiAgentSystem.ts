@@ -1,4 +1,3 @@
-
 import { toast } from "@/components/ui/use-toast";
 import { queryLLM } from "@/utils/advancedLLM";
 import { getRecentConversations, addConversationToMemory } from "@/utils/memoryManager";
@@ -73,11 +72,15 @@ Provide a clear, step-by-step analysis if the query requires reasoning.
         try {
           // Base analysis from thinker if available
           const thinkerStep = context.processingSteps.find(step => step.agentId === 'thinker');
-          const baseAnalysis = thinkerStep ? thinkerStep.output : '';
+          const baseAnalysis = {
+            type: "initial",
+            content: "",
+            confidence: 0.5
+          };
           
           const prompt = `As a personality enhancement agent, make this response more engaging and personable:
           
-Base content: ${baseAnalysis || input}
+Base content: ${baseAnalysis.content || input}
 
 Add appropriate humor, empathy, or conversational elements while preserving the main message.
 User's current detected emotion: ${context.currentEmotion || 'unknown'}
@@ -89,7 +92,7 @@ Make the response sound more human and less robotic.`;
           return response.text;
         } catch (error) {
           console.error('Personality agent error:', error);
-          return baseAnalysis || "I'll try to be more engaging next time.";
+          return baseAnalysis.content || "I'll try to be more engaging next time.";
         }
       }
     });

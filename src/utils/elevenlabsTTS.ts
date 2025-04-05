@@ -11,6 +11,12 @@ export interface ElevenLabsOptions {
   };
 }
 
+export enum ElevenLabsModel {
+  MULTILINGUAL_V2 = "eleven_multilingual_v2",
+  TURBO_V2 = "eleven_turbo_v2",
+  TURBO_V2_5 = "eleven_turbo_v2_5"
+}
+
 export interface TTSHistoryItem {
   text: string;
   timestamp: number;
@@ -22,11 +28,16 @@ export interface TTSHistoryItem {
 const TTS_HISTORY_KEY = 'karna-tts-history';
 const TTS_SETTINGS_KEY = 'karna-tts-settings';
 
+// Event types
+type StartCallback = (text: string) => void;
+type EndCallback = (text: string) => void;
+type ErrorCallback = (error: any) => void;
+
 // Default settings
 const defaultSettings = {
   apiKey: '',
   defaultVoice: 'EXAVITQu4vr4xnSDxMaL', // Sarah
-  defaultModel: 'eleven_multilingual_v2',
+  defaultModel: ElevenLabsModel.MULTILINGUAL_V2,
   voiceSettings: {
     stability: 0.5,
     similarity_boost: 0.75
@@ -41,6 +52,10 @@ class ElevenLabsTTS {
   private defaultVoiceId: string = defaultSettings.defaultVoice;
   private defaultModel: string = defaultSettings.defaultModel;
   private voiceSettings = defaultSettings.voiceSettings;
+  private audioElement: HTMLAudioElement | null = null;
+  private onStartCallbacks: StartCallback[] = [];
+  private onEndCallbacks: EndCallback[] = [];
+  private onErrorCallbacks: ErrorCallback[] = [];
   
   constructor() {
     this.loadSettings();
@@ -75,6 +90,11 @@ class ElevenLabsTTS {
     return this.initialized || this.apiKey.length > 0;
   }
   
+  // Check if has API key
+  hasApiKey(): boolean {
+    return this.apiKey.length > 0;
+  }
+  
   // Get API key
   getApiKey(): string {
     return this.apiKey;
@@ -91,6 +111,28 @@ class ElevenLabsTTS {
     } catch (error) {
       console.error('Error setting ElevenLabs API key:', error);
       return false;
+    }
+  }
+
+  // Event handlers
+  onStart(callback: StartCallback): void {
+    this.onStartCallbacks.push(callback);
+  }
+
+  onEnd(callback: EndCallback): void {
+    this.onEndCallbacks.push(callback);
+  }
+
+  onError(callback: ErrorCallback): void {
+    this.onErrorCallbacks.push(callback);
+  }
+
+  // Stop current audio playback
+  stop(): void {
+    if (this.audioElement) {
+      this.audioElement.pause();
+      this.audioElement = null;
+      this.triggerEndCallbacks('');
     }
   }
   
@@ -146,9 +188,24 @@ class ElevenLabsTTS {
       ];
     }
   }
+
+  // Trigger start callbacks
+  private triggerStartCallbacks(text: string): void {
+    this.onStartCallbacks.forEach(callback => callback(text));
+  }
+
+  // Trigger end callbacks
+  private triggerEndCallbacks(text: string): void {
+    this.onEndCallbacks.forEach(callback => callback(text));
+  }
+
+  // Trigger error callbacks
+  private triggerErrorCallbacks(error: any): void {
+    this.onErrorCallbacks.forEach(callback => callback(error));
+  }
   
   // Text to speech
-  async textToSpeech(text: string, options?: ElevenLabsOptions): Promise<string> {
+  async speak(text: string, options?: ElevenLabsOptions): Promise<string> {
     try {
       if (!text || text.trim() === '') {
         return '';
@@ -160,6 +217,9 @@ class ElevenLabsTTS {
         model_id: options?.model_id || this.defaultModel,
         voice_settings: options?.voice_settings || this.voiceSettings
       };
+
+      // Trigger start callbacks
+      this.triggerStartCallbacks(text);
       
       // Try to use electron bridge first
       if (window.electron?.elevenlabs?.textToSpeech) {
@@ -197,8 +257,18 @@ class ElevenLabsTTS {
         const audioUrl = URL.createObjectURL(audioBlob);
         
         // Play the audio
-        const audio = new Audio(audioUrl);
-        audio.play();
+        this.audioElement = new Audio(audioUrl);
+        this.audioElement.onended = () => {
+          this.triggerEndCallbacks(text);
+          this.audioElement = null;
+        };
+        this.audioElement.onerror = (error) => {
+          this.triggerErrorCallbacks(error);
+          this.audioElement = null;
+        };
+        this.audioElement.play().catch(error => {
+          this.triggerErrorCallbacks(error);
+        });
         
         // Save to history with estimated duration
         this.addToHistory(text);
@@ -208,6 +278,8 @@ class ElevenLabsTTS {
       
       // Use browser's native speech synthesis as fallback
       const utterance = new SpeechSynthesisUtterance(text);
+      utterance.onend = () => this.triggerEndCallbacks(text);
+      utterance.onerror = (error) => this.triggerErrorCallbacks(error);
       window.speechSynthesis.speak(utterance);
       
       // Save to history with estimated duration
@@ -216,6 +288,7 @@ class ElevenLabsTTS {
       return '';
     } catch (error) {
       console.error('Error in ElevenLabs TTS:', error);
+      this.triggerErrorCallbacks(error);
       
       toast({
         title: "Text-to-Speech Error",
@@ -236,6 +309,17 @@ class ElevenLabsTTS {
   // Get default voice
   getDefaultVoice(): string {
     return this.defaultVoiceId;
+  }
+
+  // Set default model
+  setDefaultModel(model: ElevenLabsModel): void {
+    this.defaultModel = model;
+    this.saveSettings();
+  }
+
+  // Get default model
+  getDefaultModel(): string {
+    return this.defaultModel;
   }
   
   // Load settings from localStorage

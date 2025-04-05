@@ -1,4 +1,3 @@
-
 /**
  * This file provides a compatibility layer for Electron's API when running in a browser environment
  */
@@ -43,9 +42,6 @@ const createMockElectronAPI = (): Window['electron'] => {
           console.log('Mock unsubscribed from system stats');
         };
       }
-    },
-    sendMessage: (channel, data) => {
-      console.log(`Mock send message to channel ${channel}:`, data);
     },
     receive: (channel, func) => {
       console.log(`Mock receive from channel ${channel}`);
@@ -221,7 +217,6 @@ const createMockElectronAPI = (): Window['electron'] => {
         };
       }
     },
-    // New APIs
     speechToText: {
       transcribeAudio: async (audioData) => {
         console.log('Mock transcribe audio with Whisper');

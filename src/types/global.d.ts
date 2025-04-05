@@ -1,4 +1,3 @@
-
 interface Window {
   SpeechRecognition?: new () => SpeechRecognition;
   webkitSpeechRecognition?: new () => SpeechRecognition;
@@ -102,5 +101,6 @@ interface Window {
       getAgentStatus: () => Promise<any>;
       configureAgents: (config: any) => Promise<boolean>;
     };
+    receive?: (channel: string, func: Function) => void;
   };
 }

@@ -109,6 +109,9 @@ export interface ElectronBridge {
     getAgentStatus: () => Promise<any>;
     configureAgents: (config: any) => Promise<boolean>;
   };
+
+  // Additional needed methods for compatibility
+  receive?: (channel: string, func: Function) => void;
 }
 
 export interface FeedbackData {
