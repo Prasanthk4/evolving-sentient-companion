@@ -1,11 +1,12 @@
 
 export interface ElectronBridge {
   // System monitoring
-  systemInfo?: {
+  systemStats?: {
     getCpuUsage: () => Promise<number>;
     getMemoryUsage: () => Promise<number>;
     getSystemUptime: () => Promise<number>;
     getBatteryLevel: () => Promise<number>;
+    subscribe: (callback: (data: any) => void) => () => void;
   };
   
   // File operations
@@ -14,6 +15,20 @@ export interface ElectronBridge {
     writeFile: (filePath: string, content: string) => Promise<boolean>;
     selectFile: (options?: any) => Promise<string | null>;
     selectDirectory: () => Promise<string | null>;
+  };
+  
+  // LLM models
+  ollama?: {
+    query: (request: any) => void;
+    on: (channel: string, callback: Function) => void;
+    off: (channel: string, callback: Function) => void;
+    getAvailableModels: () => Promise<string[]>;
+  };
+  
+  gemini?: {
+    query: (request: any) => void;
+    on: (channel: string, callback: Function) => void;
+    off: (channel: string, callback: Function) => void;
   };
   
   // Speech recognition and synthesis
@@ -55,6 +70,7 @@ export interface ElectronBridge {
     getModificationHistory: () => Promise<any[]>;
     applyChange: (modification: any) => Promise<boolean>;
     suggestImprovement: (code: string, requirements: string) => Promise<string>;
+    analyzeCode?: (filePath: string) => Promise<string>;
   };
   
   // NEW FEATURES
@@ -99,9 +115,27 @@ export interface FeedbackData {
   id?: string;
   prompt: string;
   response: string;
+  responseId?: string;
   score: number;
   feedback?: string;
   context?: string;
   emotion?: string;
   timestamp: number;
+}
+
+export interface KnowledgeEntry {
+  id: string;
+  title: string;
+  content: string;
+  source: string;
+  source_url?: string;
+  tags: string[];
+  confidence: number;
+  timestamp: number;
+}
+
+export interface ElevenLabsVoice {
+  voice_id: string;
+  name: string;
+  preview_url?: string;
 }

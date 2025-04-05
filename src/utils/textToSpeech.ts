@@ -1,6 +1,7 @@
 import { toast } from "@/components/ui/use-toast";
+import { elevenLabsTTS } from "./elevenlabsTTS";
 
-// Types for text-to-speech
+// Types for TTS
 export interface TTSOptions {
   voice?: string;
   rate?: number;
@@ -8,205 +9,274 @@ export interface TTSOptions {
   volume?: number;
 }
 
-export interface TTSResult {
+export interface TTSHistoryItem {
   text: string;
-  duration: number;
   timestamp: number;
+  duration: number;
+  voice?: string;
 }
 
-// Local storage key for speech history
+// Constants
 const TTS_HISTORY_KEY = 'karna-tts-history';
+const TTS_SETTINGS_KEY = 'karna-tts-settings';
 
-// Text-to-speech class
-export class KarnaTextToSpeech {
-  private synth: SpeechSynthesis | null = null;
-  private voices: SpeechSynthesisVoice[] = [];
-  private defaultVoice: SpeechSynthesisVoice | null = null;
+// Default TTS settings
+const defaultSettings = {
+  voice: 'default',
+  rate: 1.0,
+  pitch: 1.0,
+  volume: 1.0,
+  useElevenLabs: false
+};
+
+// The Text-to-Speech client
+class TextToSpeech {
+  private initialized: boolean = false;
   private isSpeaking: boolean = false;
-  private onStartCallback: ((text: string) => void) | null = null;
-  private onEndCallback: ((text: string) => void) | null = null;
-  private onErrorCallback: ((error: any) => void) | null = null;
+  private voices: SpeechSynthesisVoice[] = [];
+  private settings: {
+    voice: string;
+    rate: number;
+    pitch: number;
+    volume: number;
+    useElevenLabs: boolean;
+  };
   
   constructor() {
+    this.settings = { ...defaultSettings };
+    this.loadSettings();
+    this.initializeVoices();
+  }
+  
+  // Initialize voices
+  private async initializeVoices() {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      this.synth = window.speechSynthesis;
+      // Get available voices
+      this.voices = window.speechSynthesis.getVoices();
       
-      // Load available voices
-      setTimeout(() => {
-        this.loadVoices();
-      }, 100);
-      
-      // Some browsers require waiting for the voiceschanged event
-      if (this.synth) {
-        this.synth.onvoiceschanged = this.loadVoices.bind(this);
+      // If voices list is empty, wait for voices to load
+      if (this.voices.length === 0) {
+        window.speechSynthesis.onvoiceschanged = () => {
+          this.voices = window.speechSynthesis.getVoices();
+          this.initialized = true;
+        };
+      } else {
+        this.initialized = true;
       }
-    } else {
-      console.warn('Text-to-Speech is not supported in this browser.');
     }
   }
   
-  // Load available voices
-  private loadVoices(): void {
-    if (!this.synth) return;
-    
-    this.voices = this.synth.getVoices();
-    
-    // Set default voice (prefer English)
-    this.defaultVoice = this.voices.find(voice => 
-      voice.lang.includes('en-') && voice.localService
-    ) || this.voices[0];
+  // Check if TTS is available
+  isAvailable(): boolean {
+    return (typeof window !== 'undefined' && 'speechSynthesis' in window) || 
+           elevenLabsTTS.isInitialized();
+  }
+  
+  // Check if currently speaking
+  isSpeakingNow(): boolean {
+    return this.isSpeaking;
   }
   
   // Get available voices
-  public getVoices(): SpeechSynthesisVoice[] {
-    return this.voices;
+  async getVoices(): Promise<any[]> {
+    // Wait for voices to initialize if needed
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window && this.voices.length === 0) {
+      this.voices = window.speechSynthesis.getVoices();
+    }
+    
+    // Try to get voices from ElevenLabs
+    if (this.settings.useElevenLabs && elevenLabsTTS.isInitialized()) {
+      try {
+        const elevenLabsVoices = await elevenLabsTTS.getVoices();
+        return [
+          ...this.voices.map(voice => ({
+            id: voice.name,
+            name: `${voice.name} (Browser)`,
+            isDefault: voice.default,
+            source: 'browser'
+          })),
+          ...elevenLabsVoices.map(voice => ({
+            id: voice.voice_id,
+            name: `${voice.name} (ElevenLabs)`,
+            isDefault: voice.voice_id === elevenLabsTTS.getDefaultVoice(),
+            source: 'elevenlabs'
+          }))
+        ];
+      } catch (error) {
+        console.error('Error getting ElevenLabs voices:', error);
+      }
+    }
+    
+    // Return browser voices only
+    return this.voices.map(voice => ({
+      id: voice.name,
+      name: voice.name,
+      isDefault: voice.default,
+      source: 'browser'
+    }));
   }
   
   // Speak text
-  public speak(text: string, options: TTSOptions = {}): boolean {
-    if (!this.synth) {
-      // Try using Electron TTS if available
-      if (window.electron?.speak) {
-        window.electron.speak(text);
+  async speak(text: string, options?: TTSOptions): Promise<boolean> {
+    try {
+      if (!text || text.trim() === '') {
+        return false;
+      }
+      
+      // Create merged options with defaults
+      const opts = {
+        voice: options?.voice || this.settings.voice,
+        rate: options?.rate || this.settings.rate,
+        pitch: options?.pitch || this.settings.pitch,
+        volume: options?.volume || this.settings.volume
+      };
+      
+      // Try to use electron bridge first
+      if (window.electron?.textToSpeech?.speak) {
+        const result = await window.electron.textToSpeech.speak(text, opts);
         
-        // Create a result for history
-        const result: TTSResult = {
-          text,
-          duration: text.length * 60, // Rough estimate: 60ms per character
-          timestamp: Date.now()
-        };
+        // Add to history
+        this.addToHistory(text, this.estimateSpeechDuration(text, opts.rate));
         
-        addToTTSHistory(result);
+        return result;
+      }
+      
+      // Use ElevenLabs if enabled and available
+      if (this.settings.useElevenLabs && elevenLabsTTS.isInitialized()) {
+        // Check if the selected voice is from ElevenLabs
+        if (opts.voice && opts.voice.length > 10) {
+          // Likely an ElevenLabs voice ID
+          const audioUrl = await elevenLabsTTS.textToSpeech(text, {
+            voice_id: opts.voice
+          });
+          
+          if (audioUrl) {
+            return true;
+          }
+        }
+      }
+      
+      // Fall back to browser's speech synthesis
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        this.isSpeaking = true;
         
-        if (this.onStartCallback) {
-          this.onStartCallback(text);
+        // Create utterance
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // Set options
+        utterance.rate = opts.rate;
+        utterance.pitch = opts.pitch;
+        utterance.volume = opts.volume;
+        
+        // Set voice if specified
+        if (opts.voice && opts.voice !== 'default') {
+          const selectedVoice = this.voices.find(v => v.name === opts.voice);
+          if (selectedVoice) {
+            utterance.voice = selectedVoice;
+          }
         }
         
-        // Simulate TTS completion after estimated time
-        setTimeout(() => {
-          if (this.onEndCallback) {
-            this.onEndCallback(text);
-          }
-        }, result.duration);
+        // Handle speech end
+        utterance.onend = () => {
+          this.isSpeaking = false;
+        };
+        
+        // Handle speech error
+        utterance.onerror = (event) => {
+          console.error('Speech synthesis error:', event);
+          this.isSpeaking = false;
+        };
+        
+        // Speak
+        window.speechSynthesis.speak(utterance);
+        
+        // Add to history with estimated duration
+        const estimatedDuration = this.estimateSpeechDuration(text, opts.rate);
+        this.addToHistory(text, estimatedDuration);
         
         return true;
       }
       
-      toast({
-        title: "Text-to-Speech Unavailable",
-        description: "Your browser doesn't support text-to-speech. Try using Chrome or Edge.",
-        variant: "destructive"
-      });
+      return false;
+    } catch (error) {
+      console.error('TTS error:', error);
+      this.isSpeaking = false;
       return false;
     }
-    
-    // Stop any current speech
-    this.stop();
-    
-    const utterance = new SpeechSynthesisUtterance(text);
-    
-    // Set voice options
-    utterance.voice = this.getVoiceByName(options.voice) || this.defaultVoice;
-    utterance.rate = options.rate || 1;
-    utterance.pitch = options.pitch || 1;
-    utterance.volume = options.volume || 1;
-    
-    // Calculate estimated duration (browsers don't provide duration directly)
-    // Rough estimate: 60ms per character, adjusted by rate
-    const estimatedDuration = Math.ceil((text.length * 60) / (utterance.rate || 1));
-    
-    // Set callbacks
-    utterance.onstart = () => {
-      this.isSpeaking = true;
-      
-      if (this.onStartCallback) {
-        this.onStartCallback(text);
-      }
-    };
-    
-    utterance.onend = () => {
-      this.isSpeaking = false;
-      
-      // Create a result for history
-      const result: TTSResult = {
-        text,
-        duration: estimatedDuration,
-        timestamp: Date.now()
-      };
-      
-      addToTTSHistory(result);
-      
-      if (this.onEndCallback) {
-        this.onEndCallback(text);
-      }
-    };
-    
-    utterance.onerror = (event) => {
-      this.isSpeaking = false;
-      console.error('TTS error:', event);
-      
-      if (this.onErrorCallback) {
-        this.onErrorCallback(event);
-      }
-    };
-    
-    // Speak
-    this.synth.speak(utterance);
-    return true;
   }
   
   // Stop speaking
-  public stop(): void {
-    if (!this.synth) return;
-    
-    this.synth.cancel();
-    this.isSpeaking = false;
+  stopSpeaking(): void {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      this.isSpeaking = false;
+    }
   }
   
-  // Check if currently speaking
-  public isTalking(): boolean {
-    return this.isSpeaking;
+  // Update settings
+  updateSettings(newSettings: Partial<typeof defaultSettings>): void {
+    this.settings = { ...this.settings, ...newSettings };
+    this.saveSettings();
   }
   
-  // Get a voice by name
-  private getVoiceByName(name?: string): SpeechSynthesisVoice | null {
-    if (!name) return null;
-    
-    return this.voices.find(voice => 
-      voice.name.toLowerCase().includes(name.toLowerCase())
-    ) || null;
+  // Get current settings
+  getSettings(): typeof defaultSettings {
+    return { ...this.settings };
   }
   
-  // Set callbacks
-  public onStart(callback: (text: string) => void): void {
-    this.onStartCallback = callback;
+  // Load settings from localStorage
+  private loadSettings(): void {
+    try {
+      const stored = localStorage.getItem(TTS_SETTINGS_KEY);
+      if (stored) {
+        this.settings = { ...this.settings, ...JSON.parse(stored) };
+      }
+    } catch (error) {
+      console.error('Error loading TTS settings:', error);
+    }
   }
   
-  public onEnd(callback: (text: string) => void): void {
-    this.onEndCallback = callback;
+  // Save settings to localStorage
+  private saveSettings(): void {
+    try {
+      localStorage.setItem(TTS_SETTINGS_KEY, JSON.stringify(this.settings));
+    } catch (error) {
+      console.error('Error saving TTS settings:', error);
+    }
   }
   
-  public onError(callback: (error: any) => void): void {
-    this.onErrorCallback = callback;
+  // Add to TTS history
+  private addToHistory(text: string, duration: number): void {
+    try {
+      const history = getTTSHistory();
+      
+      history.unshift({
+        text,
+        timestamp: Date.now(),
+        duration,
+        voice: this.settings.voice
+      });
+      
+      // Keep only the most recent 50 entries
+      const limitedHistory = history.slice(0, 50);
+      localStorage.setItem(TTS_HISTORY_KEY, JSON.stringify(limitedHistory));
+    } catch (error) {
+      console.error('Error adding to TTS history:', error);
+    }
+  }
+  
+  // Estimate speech duration in milliseconds
+  private estimateSpeechDuration(text: string, rate: number = 1): number {
+    // Average speaking rate is about 150 words per minute
+    // So about 2.5 words per second at rate=1.0
+    const words = text.split(' ').length;
+    const durationInSeconds = words / (2.5 * rate);
+    return durationInSeconds * 1000;
   }
 }
 
-// Add TTS result to history
-export const addToTTSHistory = (result: TTSResult): void => {
-  try {
-    const history = getTTSHistory();
-    history.unshift(result);
-    
-    // Limit history size
-    const limitedHistory = history.slice(0, 50);
-    localStorage.setItem(TTS_HISTORY_KEY, JSON.stringify(limitedHistory));
-  } catch (error) {
-    console.error('Error adding to TTS history:', error);
-  }
-};
-
-// Get TTS history
-export const getTTSHistory = (): TTSResult[] => {
+// Get TTS history from localStorage
+export const getTTSHistory = (): TTSHistoryItem[] => {
   try {
     const stored = localStorage.getItem(TTS_HISTORY_KEY);
     return stored ? JSON.parse(stored) : [];
@@ -217,4 +287,9 @@ export const getTTSHistory = (): TTSResult[] => {
 };
 
 // Create a singleton instance
-export const tts = new KarnaTextToSpeech();
+export const textToSpeech = new TextToSpeech();
+
+// Utility function for quick text-to-speech
+export const speakText = (text: string, options?: TTSOptions): Promise<boolean> => {
+  return textToSpeech.speak(text, options);
+};

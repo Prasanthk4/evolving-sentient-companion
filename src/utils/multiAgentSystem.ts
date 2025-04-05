@@ -174,10 +174,15 @@ Create a response that acknowledges and builds upon our conversation history. Do
       process: async (input, context) => {
         try {
           // Gather all agent outputs
-          const thinkerOutput = context.processingSteps.find(step => step.agentId === 'thinker')?.output || '';
-          const personalityOutput = context.processingSteps.find(step => step.agentId === 'personality')?.output || '';
-          const memoryOutput = context.processingSteps.find(step => step.agentId === 'memory')?.output || '';
-          const knowledgeOutput = context.processingSteps.find(step => step.agentId === 'knowledge')?.output || '';
+          const thinkerStep = context.processingSteps.find(step => step.agentId === 'thinker');
+          const personalityStep = context.processingSteps.find(step => step.agentId === 'personality');
+          const memoryStep = context.processingSteps.find(step => step.agentId === 'memory');
+          const knowledgeStep = context.processingSteps.find(step => step.agentId === 'knowledge');
+          
+          const thinkerOutput = thinkerStep ? thinkerStep.output : '';
+          const personalityOutput = personalityStep ? personalityStep.output : '';
+          const memoryOutput = memoryStep ? memoryStep.output : '';
+          const knowledgeOutput = knowledgeStep ? knowledgeStep.output : '';
           
           const prompt = `As a coordination agent, create a unified, coherent response from these agent outputs:
           
@@ -196,10 +201,15 @@ Create a single, coherent response that integrates the most valuable insights fr
           console.error('Coordinator agent error:', error);
           
           // Fall back to the most appropriate single agent response
-          if (personalityOutput) return personalityOutput;
-          if (knowledgeOutput) return knowledgeOutput;
-          if (thinkerOutput) return thinkerOutput;
-          if (memoryOutput) return memoryOutput;
+          const personalityStep = context.processingSteps.find(step => step.agentId === 'personality');
+          const knowledgeStep = context.processingSteps.find(step => step.agentId === 'knowledge');
+          const thinkerStep = context.processingSteps.find(step => step.agentId === 'thinker');
+          const memoryStep = context.processingSteps.find(step => step.agentId === 'memory');
+          
+          if (personalityStep) return personalityStep.output;
+          if (knowledgeStep) return knowledgeStep.output;
+          if (thinkerStep) return thinkerStep.output;
+          if (memoryStep) return memoryStep.output;
           
           return "I'm processing multiple threads of thought but having trouble coordinating them.";
         }

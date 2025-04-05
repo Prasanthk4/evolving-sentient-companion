@@ -1,3 +1,4 @@
+
 interface Window {
   SpeechRecognition?: new () => SpeechRecognition;
   webkitSpeechRecognition?: new () => SpeechRecognition;
@@ -38,6 +39,20 @@ interface Window {
   electron?: {
     // Existing features
     speak?: (text: string) => void;
+    systemStats?: {
+      subscribe: (callback: (data: any) => void) => () => void;
+    };
+    ollama?: {
+      query: (request: any) => void;
+      on: (channel: string, callback: Function) => void;
+      off: (channel: string, callback: Function) => void;
+      getAvailableModels: () => Promise<string[]>;
+    };
+    gemini?: {
+      query: (request: any) => void;
+      on: (channel: string, callback: Function) => void;
+      off: (channel: string, callback: Function) => void;
+    };
     speechToText?: {
       startListening: () => Promise<boolean>;
       stopListening: () => Promise<boolean>;
@@ -58,6 +73,7 @@ interface Window {
       getModificationHistory: () => Promise<any[]>;
       applyChange: (modification: any) => Promise<boolean>;
       suggestImprovement: (code: string, requirements: string) => Promise<string>;
+      analyzeCode?: (filePath: string) => Promise<string>;
     };
     
     // New features

@@ -2,9 +2,8 @@
 /**
  * This file provides a compatibility layer for Electron's API when running in a browser environment
  */
-import { FeedbackData } from '@/types/electron';
+import { FeedbackData, KnowledgeEntry } from '@/types/electron';
 import { getTTSHistory } from '@/utils/textToSpeech';
-import { KnowledgeEntry } from '@/utils/knowledgeExpansion';
 
 // Mock implementation of the Electron API for browser environments
 const createMockElectronAPI = (): Window['electron'] => {
@@ -275,7 +274,7 @@ const createMockElectronAPI = (): Window['electron'] => {
       }
     },
     knowledgeExpansion: {
-      fetchWikipedia: async (topic) => {
+      searchWikipedia: async (topic) => {
         console.log('Mock fetch from Wikipedia:', topic);
         
         // Simulate a Wikipedia response
@@ -284,7 +283,7 @@ const createMockElectronAPI = (): Window['electron'] => {
           title: topic,
           content: `This is mock Wikipedia content about ${topic}. In a real implementation, this would be actual content from Wikipedia.`,
           source: 'Wikipedia',
-          sourceUrl: `https://en.wikipedia.org/wiki/${topic.replace(' ', '_')}`,
+          source_url: `https://en.wikipedia.org/wiki/${topic.replace(' ', '_')}`,
           tags: [topic],
           confidence: 0.9,
           timestamp: Date.now()
@@ -292,7 +291,7 @@ const createMockElectronAPI = (): Window['electron'] => {
         
         return entry;
       },
-      fetchNews: async (query) => {
+      searchWeb: async (query) => {
         console.log('Mock fetch news:', query);
         
         // Simulate news articles
@@ -306,15 +305,48 @@ const createMockElectronAPI = (): Window['electron'] => {
           }
         ];
       },
-      scrapeWebsite: async (url) => {
-        console.log('Mock scrape website:', url);
-        
-        // Simulate scraped content
+      saveKnowledgeEntry: async (entry) => {
+        console.log('Mock save knowledge entry:', entry);
+        return true;
+      }
+    },
+    gestureRecognition: {
+      detectGesture: async (imageData) => {
+        console.log('Mock detect gesture from frame');
+        const gestures = ['wave', 'thumbs_up', 'thumbs_down', 'peace', 'none'];
         return {
-          title: 'Mock Website Title',
-          content: 'This is mock scraped content from the website.',
-          links: ['https://example.com/page1', 'https://example.com/page2']
+          gesture: gestures[Math.floor(Math.random() * gestures.length)],
+          confidence: 0.6 + (Math.random() * 0.4),
+          timestamp: Date.now()
         };
+      },
+      trainGesture: async (name, samples) => {
+        console.log(`Mock train gesture: ${name} with ${samples.length} samples`);
+        return true;
+      },
+      getSupportedGestures: async () => {
+        return ['wave', 'thumbs_up', 'thumbs_down', 'peace'];
+      }
+    },
+    multiAgent: {
+      processWithAgents: async (message, context) => {
+        console.log('Mock process with multiple agents:', message);
+        return `This is a response from the multi-agent system processing: "${message}"`;
+      },
+      getAgentStatus: async () => {
+        return {
+          active: true,
+          agents: [
+            { id: 'thinker', status: 'active' },
+            { id: 'personality', status: 'active' },
+            { id: 'memory', status: 'active' },
+            { id: 'knowledge', status: 'active' }
+          ]
+        };
+      },
+      configureAgents: async (config) => {
+        console.log('Mock configure agents:', config);
+        return true;
       }
     }
   };
