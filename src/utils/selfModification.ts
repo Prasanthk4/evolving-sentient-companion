@@ -19,8 +19,21 @@ export interface CodeModification {
   };
 }
 
+// Define CodeImprovement interface to match what's used in SelfImprovement.tsx
+export interface CodeImprovement {
+  id: string;
+  filePath: string;
+  originalCode: string;
+  suggestedCode: string;
+  explanation: string;
+  benefits: string[];
+  timestamp: number;
+  applied: boolean;
+}
+
 // Local storage key
 const MODIFICATIONS_KEY = 'karna-code-modifications';
+const IMPROVEMENTS_KEY = 'karna-code-improvements';
 
 // Get all code modifications
 export const getCodeModifications = (): CodeModification[] => {
@@ -159,6 +172,112 @@ export const analyzeFile = async (filePath: string): Promise<string> => {
   } catch (error) {
     console.error('Error analyzing file:', error);
     return "Error analyzing file. Please try again.";
+  }
+};
+
+// Add functions used by SelfImprovement.tsx
+// Get improvement suggestions
+export const getImprovementSuggestions = (): CodeImprovement[] => {
+  try {
+    const stored = localStorage.getItem(IMPROVEMENTS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch (error) {
+    console.error('Error getting improvement suggestions:', error);
+    return [];
+  }
+};
+
+// Apply improvement
+export const applyImprovement = async (id: string): Promise<boolean> => {
+  try {
+    const improvements = getImprovementSuggestions();
+    const index = improvements.findIndex(imp => imp.id === id);
+    
+    if (index === -1) {
+      return false;
+    }
+    
+    improvements[index].applied = true;
+    localStorage.setItem(IMPROVEMENTS_KEY, JSON.stringify(improvements));
+    
+    // Create a code modification from this improvement
+    await addCodeModification({
+      file: improvements[index].filePath,
+      original: improvements[index].originalCode,
+      modified: improvements[index].suggestedCode,
+      purpose: "Apply AI-suggested improvement",
+      improvement: improvements[index].explanation,
+      appliedBy: 'user',
+      approved: true
+    });
+    
+    toast({
+      title: "Improvement Applied",
+      description: `Changes to ${improvements[index].filePath.split('/').pop()} have been applied.`
+    });
+    
+    return true;
+  } catch (error) {
+    console.error('Error applying improvement:', error);
+    return false;
+  }
+};
+
+// Reject improvement
+export const rejectImprovement = (id: string): boolean => {
+  try {
+    const improvements = getImprovementSuggestions();
+    const filteredImprovements = improvements.filter(imp => imp.id !== id);
+    
+    if (filteredImprovements.length === improvements.length) {
+      return false;
+    }
+    
+    localStorage.setItem(IMPROVEMENTS_KEY, JSON.stringify(filteredImprovements));
+    
+    toast({
+      title: "Improvement Rejected",
+      description: "The suggested improvement has been rejected."
+    });
+    
+    return true;
+  } catch (error) {
+    console.error('Error rejecting improvement:', error);
+    return false;
+  }
+};
+
+// Initiate auto-improvement analysis
+export const initiateAutoImprovement = async (componentName: string): Promise<boolean> => {
+  try {
+    // Mock implementation for browser environments
+    // In a real implementation, this would analyze the component
+    toast({
+      title: "Analysis Started",
+      description: `Analyzing ${componentName} for potential improvements...`
+    });
+    
+    // Create some mock improvements after a delay
+    setTimeout(() => {
+      const mockImprovements: CodeImprovement[] = [{
+        id: `imp-${Date.now()}`,
+        filePath: `src/components/${componentName}.tsx`,
+        originalCode: "// Original code would be here",
+        suggestedCode: "// Improved code with better performance",
+        explanation: "This change optimizes the component's rendering by memoizing expensive calculations.",
+        benefits: ["Improved performance", "Better code organization"],
+        timestamp: Date.now(),
+        applied: false
+      }];
+      
+      const existing = getImprovementSuggestions();
+      localStorage.setItem(IMPROVEMENTS_KEY, JSON.stringify([...mockImprovements, ...existing]));
+    }, 2000);
+    
+    return true;
+  } catch (error) {
+    console.error('Error initiating auto-improvement:', error);
+    return false;
   }
 };
 
