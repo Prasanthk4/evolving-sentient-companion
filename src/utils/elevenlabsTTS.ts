@@ -1,399 +1,346 @@
+
 import { toast } from "@/components/ui/use-toast";
-import { ElevenLabsVoice } from "@/types/electron";
 
-// Types
-export interface ElevenLabsOptions {
-  voice_id?: string;
-  model_id?: string;
-  voice_settings?: {
-    stability: number;
-    similarity_boost: number;
-  };
-}
-
+// Define ElevenLabs models
 export enum ElevenLabsModel {
   MULTILINGUAL_V2 = "eleven_multilingual_v2",
   TURBO_V2 = "eleven_turbo_v2",
-  TURBO_V2_5 = "eleven_turbo_v2_5"
+  TURBO_V2_5 = "eleven_turbo_v2_5",
+  MULTILINGUAL_V1 = "eleven_multilingual_v1",
+  MULTILINGUAL_STS_V2 = "eleven_multilingual_sts_v2",
+  ENGLISH_V1 = "eleven_monolingual_v1",
+  ENGLISH_STS_V2 = "eleven_english_sts_v2"
 }
 
-export interface TTSHistoryItem {
-  text: string;
-  timestamp: number;
-  duration: number;
-  voice_id?: string;
+// Define voice interface
+export interface ElevenLabsVoice {
+  voice_id: string;
+  name: string;
+  preview_url?: string;
 }
 
-// Constants
-const TTS_HISTORY_KEY = 'karna-tts-history';
-const TTS_SETTINGS_KEY = 'karna-tts-settings';
+// Default voices
+const DEFAULT_VOICES: ElevenLabsVoice[] = [
+  { voice_id: "9BWtsMINqrJLrRacOk9x", name: "Aria" },
+  { voice_id: "CwhRBWXzGAHq8TQ4Fs17", name: "Roger" },
+  { voice_id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah" },
+  { voice_id: "FGY2WhTYpPnrIDTdsKH5", name: "Laura" },
+  { voice_id: "IKne3meq5aSn9XLyUdCD", name: "Charlie" },
+  { voice_id: "JBFqnCBsd6RMkjVDRZzb", name: "George" },
+  { voice_id: "N2lVS1w4EtoT3dr4eOWO", name: "Callum" },
+  { voice_id: "SAz9YHcvj6GT2YYXdXww", name: "River" },
+  { voice_id: "TX3LPaxmHKxFdv7VOQHJ", name: "Liam" },
+  { voice_id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte" },
+  { voice_id: "Xb7hH8MSUJpSbSDYk0k2", name: "Alice" },
+  { voice_id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda" },
+  { voice_id: "bIHbv24MWmeRgasZH58o", name: "Will" }
+];
 
-// Event types
-type StartCallback = (text: string) => void;
-type EndCallback = (text: string) => void;
-type ErrorCallback = (error: any) => void;
+// Settings interface
+interface ElevenLabsSettings {
+  apiKey: string | null;
+  defaultVoiceId: string;
+  defaultModel: ElevenLabsModel;
+  stability: number;
+  similarityBoost: number;
+  speaking: boolean;
+  speakingId: string | null;
+}
 
-// Default settings
-const defaultSettings = {
-  apiKey: '',
-  defaultVoice: 'EXAVITQu4vr4xnSDxMaL', // Sarah
-  defaultModel: ElevenLabsModel.MULTILINGUAL_V2,
-  voiceSettings: {
-    stability: 0.5,
-    similarity_boost: 0.75
-  }
-};
+// Local storage key
+const ELEVENLABS_SETTINGS_KEY = "karna-elevenlabs-settings";
+const ELEVENLABS_HISTORY_KEY = "karna-elevenlabs-history";
 
-// The ElevenLabs TTS client
-class ElevenLabsTTS {
-  private apiKey: string = '';
-  private initialized: boolean = false;
-  private voices: ElevenLabsVoice[] = [];
-  private defaultVoiceId: string = defaultSettings.defaultVoice;
-  private defaultModel: string = defaultSettings.defaultModel;
-  private voiceSettings = defaultSettings.voiceSettings;
+// ElevenLabs TTS class
+export class ElevenLabsTTS {
+  private settings: ElevenLabsSettings;
   private audioElement: HTMLAudioElement | null = null;
-  private onStartCallbacks: StartCallback[] = [];
-  private onEndCallbacks: EndCallback[] = [];
-  private onErrorCallbacks: ErrorCallback[] = [];
-  
+  private onStartCallback: (() => void) | null = null;
+  private onEndCallback: (() => void) | null = null;
+
   constructor() {
-    this.loadSettings();
-  }
-  
-  // Initialize with API key
-  async initialize(apiKey?: string): Promise<boolean> {
-    try {
-      // If API key is provided, save it
-      if (apiKey) {
-        this.apiKey = apiKey;
-        this.saveSettings();
-      }
+    // Initialize settings from local storage or use defaults
+    const savedSettings = localStorage.getItem(ELEVENLABS_SETTINGS_KEY);
+    
+    if (savedSettings) {
+      this.settings = JSON.parse(savedSettings);
+    } else {
+      this.settings = {
+        apiKey: null,
+        defaultVoiceId: "21m00Tcm4TlvDq8ikWAM", // Rachel voice
+        defaultModel: ElevenLabsModel.MULTILINGUAL_V2,
+        stability: 0.5,
+        similarityBoost: 0.75,
+        speaking: false,
+        speakingId: null
+      };
+      this.saveSettings();
+    }
+    
+    // Create audio element
+    if (typeof window !== 'undefined') {
+      this.audioElement = new Audio();
       
-      // Test the API connection
-      const voices = await this.getVoices();
+      // Set up event listeners
+      this.audioElement.addEventListener('play', () => {
+        this.settings.speaking = true;
+        if (this.onStartCallback) this.onStartCallback();
+      });
       
-      if (voices && voices.length > 0) {
-        this.initialized = true;
-        return true;
-      }
+      this.audioElement.addEventListener('ended', () => {
+        this.settings.speaking = false;
+        this.settings.speakingId = null;
+        if (this.onEndCallback) this.onEndCallback();
+      });
       
-      return false;
-    } catch (error) {
-      console.error('Error initializing ElevenLabs TTS:', error);
-      return false;
+      this.audioElement.addEventListener('pause', () => {
+        if (!this.audioElement?.ended) {
+          this.settings.speaking = false;
+          if (this.onEndCallback) this.onEndCallback();
+        }
+      });
+      
+      this.audioElement.addEventListener('error', (e) => {
+        console.error('Audio playback error:', e);
+        this.settings.speaking = false;
+        this.settings.speakingId = null;
+        if (this.onEndCallback) this.onEndCallback();
+      });
     }
   }
   
-  // Check if initialized
-  isInitialized(): boolean {
-    return this.initialized || this.apiKey.length > 0;
-  }
-  
-  // Check if has API key
-  hasApiKey(): boolean {
-    return this.apiKey.length > 0;
-  }
-  
-  // Get API key
-  getApiKey(): string {
-    return this.apiKey;
+  // Check if API key is set
+  public hasApiKey(): boolean {
+    return !!this.settings.apiKey;
   }
   
   // Set API key
-  async setApiKey(apiKey: string): Promise<boolean> {
+  public async setApiKey(apiKey: string): Promise<boolean> {
+    this.settings.apiKey = apiKey;
+    this.saveSettings();
+    
+    // Verify API key works by attempting to get available voices
     try {
-      // Save the new API key and test the connection
-      this.apiKey = apiKey;
-      this.saveSettings();
-      
-      return await this.initialize();
+      await this.getAvailableVoices();
+      toast({
+        title: "ElevenLabs API Key Set",
+        description: "Your API key was successfully validated."
+      });
+      return true;
     } catch (error) {
-      console.error('Error setting ElevenLabs API key:', error);
+      console.error('Error validating ElevenLabs API key:', error);
+      this.settings.apiKey = null;
+      this.saveSettings();
+      toast({
+        title: "Invalid API Key",
+        description: "Could not validate your ElevenLabs API key.",
+        variant: "destructive"
+      });
       return false;
     }
   }
-
-  // Event handlers
-  onStart(callback: StartCallback): void {
-    this.onStartCallbacks.push(callback);
+  
+  // Set callbacks
+  public onStart(callback: () => void): void {
+    this.onStartCallback = callback;
   }
-
-  onEnd(callback: EndCallback): void {
-    this.onEndCallbacks.push(callback);
+  
+  public onEnd(callback: () => void): void {
+    this.onEndCallback = callback;
   }
-
-  onError(callback: ErrorCallback): void {
-    this.onErrorCallbacks.push(callback);
-  }
-
-  // Stop current audio playback
-  stop(): void {
-    if (this.audioElement) {
+  
+  // Stop speaking
+  public stop(): void {
+    if (this.audioElement && !this.audioElement.paused) {
       this.audioElement.pause();
-      this.audioElement = null;
-      this.triggerEndCallbacks('');
+      this.audioElement.currentTime = 0;
     }
-  }
-  
-  // Get available voices
-  async getVoices(): Promise<ElevenLabsVoice[]> {
-    try {
-      // Try to use electron bridge first
-      if (window.electron?.elevenlabs?.getAvailableVoices) {
-        const voices = await window.electron.elevenlabs.getAvailableVoices();
-        if (voices && voices.length > 0) {
-          this.voices = voices;
-          return voices;
-        }
-      }
-      
-      // If we have an API key, make a direct API call
-      if (this.apiKey) {
-        const response = await fetch('https://api.elevenlabs.io/v1/voices', {
-          method: 'GET',
-          headers: {
-            'xi-api-key': this.apiKey,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        if (!response.ok) {
-          throw new Error(`ElevenLabs API error: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        this.voices = data.voices;
-        return data.voices;
-      }
-      
-      // Use hardcoded voices as fallback
-      return [
-        { voice_id: '9BWtsMINqrJLrRacOk9x', name: 'Aria', preview_url: '' },
-        { voice_id: 'CwhRBWXzGAHq8TQ4Fs17', name: 'Roger', preview_url: '' },
-        { voice_id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', preview_url: '' },
-        { voice_id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura', preview_url: '' },
-        { voice_id: 'IKne3meq5aSn9XLyUdCD', name: 'Charlie', preview_url: '' }
-      ];
-    } catch (error) {
-      console.error('Error getting ElevenLabs voices:', error);
-      
-      // Return hardcoded voices as fallback
-      return [
-        { voice_id: '9BWtsMINqrJLrRacOk9x', name: 'Aria', preview_url: '' },
-        { voice_id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah', preview_url: '' },
-        { voice_id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam', preview_url: '' },
-        { voice_id: 'jBpfuIE2acCO8z3wKNLl', name: 'Nicole', preview_url: '' },
-        { voice_id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', preview_url: '' }
-      ];
-    }
-  }
-
-  // Trigger start callbacks
-  private triggerStartCallbacks(text: string): void {
-    this.onStartCallbacks.forEach(callback => callback(text));
-  }
-
-  // Trigger end callbacks
-  private triggerEndCallbacks(text: string): void {
-    this.onEndCallbacks.forEach(callback => callback(text));
-  }
-
-  // Trigger error callbacks
-  private triggerErrorCallbacks(error: any): void {
-    this.onErrorCallbacks.forEach(callback => callback(error));
-  }
-  
-  // Text to speech
-  async speak(text: string, options?: ElevenLabsOptions): Promise<string> {
-    try {
-      if (!text || text.trim() === '') {
-        return '';
-      }
-      
-      // Default options
-      const opts: ElevenLabsOptions = {
-        voice_id: options?.voice_id || this.defaultVoiceId,
-        model_id: options?.model_id || this.defaultModel,
-        voice_settings: options?.voice_settings || this.voiceSettings
-      };
-
-      // Trigger start callbacks
-      this.triggerStartCallbacks(text);
-      
-      // Try to use electron bridge first
-      if (window.electron?.elevenlabs?.textToSpeech) {
-        const result = await window.electron.elevenlabs.textToSpeech(text, opts);
-        
-        // Save to history
-        this.addToHistory(text);
-        
-        return result;
-      }
-      
-      // If we have an API key, make a direct API call
-      if (this.apiKey) {
-        const response = await fetch(
-          `https://api.elevenlabs.io/v1/text-to-speech/${opts.voice_id}`,
-          {
-            method: 'POST',
-            headers: {
-              'xi-api-key': this.apiKey,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              text,
-              model_id: opts.model_id,
-              voice_settings: opts.voice_settings
-            })
-          }
-        );
-        
-        if (!response.ok) {
-          throw new Error(`ElevenLabs API error: ${response.status}`);
-        }
-        
-        const audioBlob = await response.blob();
-        const audioUrl = URL.createObjectURL(audioBlob);
-        
-        // Play the audio
-        this.audioElement = new Audio(audioUrl);
-        this.audioElement.onended = () => {
-          this.triggerEndCallbacks(text);
-          this.audioElement = null;
-        };
-        this.audioElement.onerror = (error) => {
-          this.triggerErrorCallbacks(error);
-          this.audioElement = null;
-        };
-        this.audioElement.play().catch(error => {
-          this.triggerErrorCallbacks(error);
-        });
-        
-        // Save to history with estimated duration
-        this.addToHistory(text);
-        
-        return audioUrl;
-      }
-      
-      // Use browser's native speech synthesis as fallback
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.onend = () => this.triggerEndCallbacks(text);
-      utterance.onerror = (error) => this.triggerErrorCallbacks(error);
-      window.speechSynthesis.speak(utterance);
-      
-      // Save to history with estimated duration
-      this.addToHistory(text);
-      
-      return '';
-    } catch (error) {
-      console.error('Error in ElevenLabs TTS:', error);
-      this.triggerErrorCallbacks(error);
-      
-      toast({
-        title: "Text-to-Speech Error",
-        description: "Failed to convert text to speech.",
-        variant: "destructive"
-      });
-      
-      return '';
-    }
+    
+    this.settings.speaking = false;
+    this.settings.speakingId = null;
   }
   
   // Set default voice
-  setDefaultVoice(voiceId: string): void {
-    this.defaultVoiceId = voiceId;
+  public setDefaultVoice(voiceId: string): void {
+    this.settings.defaultVoiceId = voiceId;
     this.saveSettings();
   }
   
-  // Get default voice
-  getDefaultVoice(): string {
-    return this.defaultVoiceId;
-  }
-
   // Set default model
-  setDefaultModel(model: ElevenLabsModel): void {
-    this.defaultModel = model;
+  public setDefaultModel(model: ElevenLabsModel): void {
+    this.settings.defaultModel = model;
     this.saveSettings();
   }
-
-  // Get default model
-  getDefaultModel(): string {
-    return this.defaultModel;
+  
+  // Set stability
+  public setStability(stability: number): void {
+    this.settings.stability = Math.max(0, Math.min(1, stability));
+    this.saveSettings();
   }
   
-  // Load settings from localStorage
-  private loadSettings(): void {
-    try {
-      const stored = localStorage.getItem(TTS_SETTINGS_KEY);
-      if (stored) {
-        const settings = JSON.parse(stored);
-        this.apiKey = settings.apiKey || '';
-        this.defaultVoiceId = settings.defaultVoice || defaultSettings.defaultVoice;
-        this.defaultModel = settings.defaultModel || defaultSettings.defaultModel;
-        this.voiceSettings = settings.voiceSettings || defaultSettings.voiceSettings;
-        
-        if (this.apiKey) {
-          this.initialized = true;
-        }
-      }
-    } catch (error) {
-      console.error('Error loading TTS settings:', error);
+  // Set similarity boost
+  public setSimilarityBoost(similarityBoost: number): void {
+    this.settings.similarityBoost = Math.max(0, Math.min(1, similarityBoost));
+    this.saveSettings();
+  }
+  
+  // Generate speech
+  public async speak(text: string, options?: {
+    voiceId?: string;
+    model?: ElevenLabsModel;
+    stability?: number;
+    similarityBoost?: number;
+  }): Promise<boolean> {
+    // If no API key is set, use system TTS
+    if (!this.settings.apiKey) {
+      return this.fallbackToSystemTTS(text);
     }
+    
+    // First try using Electron bridge if available
+    if (window.electron?.elevenlabs?.textToSpeech) {
+      try {
+        const audioUrl = await window.electron.elevenlabs.textToSpeech(text, {
+          voiceId: options?.voiceId || this.settings.defaultVoiceId,
+          model: options?.model || this.settings.defaultModel,
+          stability: options?.stability !== undefined ? options.stability : this.settings.stability,
+          similarityBoost: options?.similarityBoost !== undefined ? options.similarityBoost : this.settings.similarityBoost
+        });
+        
+        if (this.audioElement) {
+          // Generate a unique ID for this speech request
+          const speechId = Date.now().toString();
+          this.settings.speakingId = speechId;
+          
+          // Set audio source and play
+          this.audioElement.src = audioUrl;
+          this.audioElement.play();
+          
+          // Add to history
+          this.addToHistory(text, {
+            voiceId: options?.voiceId || this.settings.defaultVoiceId,
+            model: options?.model || this.settings.defaultModel
+          });
+          
+          return true;
+        }
+      } catch (error) {
+        console.error('Error using ElevenLabs via Electron:', error);
+        return this.fallbackToSystemTTS(text);
+      }
+    } else {
+      // Direct API call implementation (for browser-only environments)
+      try {
+        // If we reach here, it means we need to make a direct API call
+        // which requires handling CORS and audio streaming
+        console.warn('Direct ElevenLabs API calls not implemented in browser. Falling back to system TTS.');
+        return this.fallbackToSystemTTS(text);
+      } catch (error) {
+        console.error('Error with direct ElevenLabs API call:', error);
+        return this.fallbackToSystemTTS(text);
+      }
+    }
+    
+    return false;
   }
   
-  // Save settings to localStorage
-  private saveSettings(): void {
-    try {
-      const settings = {
-        apiKey: this.apiKey,
-        defaultVoice: this.defaultVoiceId,
-        defaultModel: this.defaultModel,
-        voiceSettings: this.voiceSettings
+  // Fallback to system TTS
+  private fallbackToSystemTTS(text: string): boolean {
+    // Use browser's speech synthesis if available
+    if ('speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.onstart = () => {
+        this.settings.speaking = true;
+        if (this.onStartCallback) this.onStartCallback();
       };
       
-      localStorage.setItem(TTS_SETTINGS_KEY, JSON.stringify(settings));
-    } catch (error) {
-      console.error('Error saving TTS settings:', error);
+      utterance.onend = () => {
+        this.settings.speaking = false;
+        this.settings.speakingId = null;
+        if (this.onEndCallback) this.onEndCallback();
+      };
+      
+      utterance.onerror = () => {
+        this.settings.speaking = false;
+        this.settings.speakingId = null;
+        if (this.onEndCallback) this.onEndCallback();
+      };
+      
+      window.speechSynthesis.speak(utterance);
+      
+      // Generate a unique ID for this speech request
+      const speechId = Date.now().toString();
+      this.settings.speakingId = speechId;
+      
+      // Add to history
+      this.addToHistory(text, { systemTTS: true });
+      
+      return true;
     }
+    
+    return false;
   }
   
-  // Add to TTS history
-  private addToHistory(text: string): void {
+  // Get available voices
+  public async getAvailableVoices(): Promise<ElevenLabsVoice[]> {
+    // First try using Electron bridge if available
+    if (window.electron?.elevenlabs?.getAvailableVoices) {
+      try {
+        return await window.electron.elevenlabs.getAvailableVoices();
+      } catch (error) {
+        console.error('Error getting voices via Electron:', error);
+        return DEFAULT_VOICES;
+      }
+    }
+    
+    // If API key is present, try direct API call
+    if (this.settings.apiKey) {
+      // This would be implemented for browser-direct API calls
+      // Requires handling CORS and authentication
+    }
+    
+    // Fall back to default voices
+    return DEFAULT_VOICES;
+  }
+  
+  // Add to history
+  private addToHistory(text: string, details: any): void {
     try {
-      const history = getTTSHistory();
-      
-      // Estimate duration based on text length (very rough approximation)
-      // Average speaking rate is ~150 words per minute or ~2.5 words per second
-      const words = text.split(' ').length;
-      const durationInMs = (words / 2.5) * 1000;
-      
+      const history = this.getTTSHistory();
       history.unshift({
         text,
         timestamp: Date.now(),
-        duration: durationInMs,
-        voice_id: this.defaultVoiceId
+        ...details
       });
       
-      // Keep only the most recent 50 entries
-      const limitedHistory = history.slice(0, 50);
-      localStorage.setItem(TTS_HISTORY_KEY, JSON.stringify(limitedHistory));
+      // Limit history size
+      const limitedHistory = history.slice(0, 100);
+      localStorage.setItem(ELEVENLABS_HISTORY_KEY, JSON.stringify(limitedHistory));
     } catch (error) {
       console.error('Error adding to TTS history:', error);
     }
   }
+  
+  // Get TTS history
+  public getTTSHistory(): any[] {
+    try {
+      const stored = localStorage.getItem(ELEVENLABS_HISTORY_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch (error) {
+      console.error('Error getting TTS history:', error);
+      return [];
+    }
+  }
+  
+  // Save settings
+  private saveSettings(): void {
+    localStorage.setItem(ELEVENLABS_SETTINGS_KEY, JSON.stringify(this.settings));
+  }
+  
+  // Is speaking
+  public isSpeaking(): boolean {
+    return this.settings.speaking;
+  }
 }
 
-// Get TTS history from localStorage
-export const getTTSHistory = (): TTSHistoryItem[] => {
-  try {
-    const stored = localStorage.getItem(TTS_HISTORY_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch (error) {
-    console.error('Error getting TTS history:', error);
-    return [];
-  }
-};
-
-// Create a singleton instance
-export const elevenLabsTTS = new ElevenLabsTTS();
+// Create singleton instance
+export const elevenlabsTTS = new ElevenLabsTTS();

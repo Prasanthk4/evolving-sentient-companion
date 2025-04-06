@@ -63,24 +63,20 @@ Provide a clear, step-by-step analysis if the query requires reasoning.
     });
     
     // Personality Agent - Adding humor and emotional intelligence
-    this.agents.push({
+    const personalityAgent = {
       id: 'personality',
       name: 'Personality Adapter',
-      role: 'personality',
+      role: 'personality' as AgentRole,
       description: 'Adds humor, empathy and adjusts tone based on context',
-      process: async (input, context) => {
+      process: async (input: string, context: AgentContext) => {
         try {
-          // Base analysis from thinker if available
+          // Get thinker output if available
           const thinkerStep = context.processingSteps.find(step => step.agentId === 'thinker');
-          const baseAnalysis = {
-            type: "initial",
-            content: thinkerStep?.output || input,
-            confidence: 0.5
-          };
+          const contentToEnhance = thinkerStep?.output || input;
           
           const prompt = `As a personality enhancement agent, make this response more engaging and personable:
           
-Base content: ${baseAnalysis.content}
+Base content: ${contentToEnhance}
 
 Add appropriate humor, empathy, or conversational elements while preserving the main message.
 User's current detected emotion: ${context.currentEmotion || 'unknown'}
@@ -95,7 +91,9 @@ Make the response sound more human and less robotic.`;
           return input;
         }
       }
-    });
+    };
+    
+    this.agents.push(personalityAgent);
     
     // Memory Agent - Handling conversation history and user preferences
     this.agents.push({

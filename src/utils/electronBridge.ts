@@ -1,3 +1,4 @@
+
 /**
  * This file provides a compatibility layer for Electron's API when running in a browser environment
  */
@@ -268,6 +269,28 @@ const createMockElectronAPI = (): Window['electron'] => {
         return ['Daniel', 'Karen', 'Samantha', 'Thomas'];
       }
     },
+    elevenlabs: {
+      textToSpeech: async (text, options) => {
+        console.log('Mock ElevenLabs TTS:', text, options);
+        // Return a data URL that would normally be an audio file
+        return 'data:audio/wav;base64,MOCK_AUDIO_DATA';
+      },
+      getAvailableVoices: async () => {
+        console.log('Mock get ElevenLabs voices');
+        return [
+          { voice_id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel" },
+          { voice_id: "AZnzlk1XvdvUeBnXmlld", name: "Domi" },
+          { voice_id: "EXAVITQu4vr4xnSDxMaL", name: "Bella" },
+          { voice_id: "ErXwobaYiN019PkySvjV", name: "Antoni" }
+        ];
+      },
+      setApiKey: async (key) => {
+        console.log('Mock set ElevenLabs API key');
+        // Store in localStorage for mock persistence
+        localStorage.setItem('elevenlabs-api-key', key);
+        return true;
+      }
+    },
     knowledgeExpansion: {
       searchWikipedia: async (topic) => {
         console.log('Mock fetch from Wikipedia:', topic);
@@ -342,6 +365,33 @@ const createMockElectronAPI = (): Window['electron'] => {
       configureAgents: async (config) => {
         console.log('Mock configure agents:', config);
         return true;
+      }
+    },
+    whisperAI: {
+      transcribeFile: async (filePath, options) => {
+        console.log('Mock transcribe file with Whisper:', filePath, options);
+        return {
+          text: "This is a mock Whisper AI transcription from a file.",
+          segments: [
+            { id: 0, start: 0, end: 2.5, text: "This is a mock", confidence: 0.95 },
+            { id: 1, start: 2.5, end: 5.0, text: "Whisper AI transcription from a file.", confidence: 0.92 }
+          ],
+          language: options?.language || 'en'
+        };
+      },
+      transcribeAudio: async (audioData, options) => {
+        console.log('Mock transcribe audio with Whisper');
+        return {
+          text: "This is a mock Whisper AI transcription from audio data.",
+          segments: [
+            { id: 0, start: 0, end: 2.5, text: "This is a mock", confidence: 0.95 },
+            { id: 1, start: 2.5, end: 5.0, text: "Whisper AI transcription from audio data.", confidence: 0.92 }
+          ],
+          language: options?.language || 'en'
+        };
+      },
+      isAvailable: async () => {
+        return true; // Mock that Whisper is available
       }
     }
   };

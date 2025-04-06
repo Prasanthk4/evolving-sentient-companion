@@ -1,362 +1,228 @@
 
 import { toast } from "@/components/ui/use-toast";
-import { queryLLM, LLMProvider } from "./advancedLLM";
 
-// Interface for code modification
+// Types for code self-modification
 export interface CodeModification {
-  filePath: string;
-  originalCode: string;
-  modifiedCode: string;
-  purpose: string;
-  timestamp: number;
-  appliedBy: 'user' | 'ai';
-  approved: boolean;
-}
-
-// Interface for code improvement suggestion
-export interface CodeImprovement {
   id: string;
-  filePath: string;
-  originalCode: string;
-  suggestedCode: string;
-  explanation: string;
-  benefits: string[];
+  file: string;
+  original: string;
+  modified: string;
+  purpose: string;
+  improvement: string;
   timestamp: number;
+  appliedBy: 'ai' | 'user';
   approved: boolean;
-  applied: boolean;
+  metrics?: {
+    efficiency?: number;
+    readability?: number;
+    functionality?: number;
+  };
 }
 
-// Local storage key for code modifications
-const CODE_MODIFICATIONS_KEY = 'karna-code-modifications';
-const CODE_IMPROVEMENTS_KEY = 'karna-code-improvements';
+// Local storage key
+const MODIFICATIONS_KEY = 'karna-code-modifications';
 
-// Get modification history
-export const getModificationHistory = async (): Promise<CodeModification[]> => {
+// Get all code modifications
+export const getCodeModifications = (): CodeModification[] => {
   try {
-    // Try to use the electron API first
+    // First try to use electron API if available
     if (window.electron?.selfModify?.getModificationHistory) {
-      return await window.electron.selfModify.getModificationHistory();
+      // This will be async, but for simplicity we'll also use local storage
+      window.electron.selfModify.getModificationHistory()
+        .then(history => {
+          localStorage.setItem(MODIFICATIONS_KEY, JSON.stringify(history));
+        })
+        .catch(console.error);
     }
     
-    // Fallback to localStorage
-    const stored = localStorage.getItem(CODE_MODIFICATIONS_KEY);
+    // Use local storage as source of truth
+    const stored = localStorage.getItem(MODIFICATIONS_KEY);
     return stored ? JSON.parse(stored) : [];
   } catch (error) {
-    console.error('Error getting modification history:', error);
+    console.error('Error getting code modifications:', error);
     return [];
   }
 };
 
-// Save a code modification
-export const saveModification = async (modification: CodeModification): Promise<boolean> => {
+// Add a code modification
+export const addCodeModification = async (modification: Omit<CodeModification, 'id' | 'timestamp'>): Promise<boolean> => {
   try {
-    // Try to use the electron API first
-    if (window.electron?.selfModify?.applyChange) {
-      return await window.electron.selfModify.applyChange(modification);
-    }
-    
-    // Fallback to localStorage
-    const history = await getModificationHistory();
-    history.push(modification);
-    localStorage.setItem(CODE_MODIFICATIONS_KEY, JSON.stringify(history));
-    return true;
-  } catch (error) {
-    console.error('Error saving modification:', error);
-    return false;
-  }
-};
-
-// Analyze code and suggest improvements
-export const analyzeCoreLogic = async (
-  filePath: string, 
-  code: string, 
-  requirements: string
-): Promise<CodeImprovement> => {
-  try {
-    // First try to use the electron API
-    if (window.electron?.selfModify?.suggestImprovement) {
-      const suggestedCode = await window.electron.selfModify.suggestImprovement(
-        code, 
-        requirements
-      );
-      
-      // Generate an explanation using the LLM
-      const explanation = await generateExplanation(code, suggestedCode);
-      
-      const improvement: CodeImprovement = {
-        id: Date.now().toString(),
-        filePath,
-        originalCode: code,
-        suggestedCode,
-        explanation,
-        benefits: extractBenefits(explanation),
-        timestamp: Date.now(),
-        approved: false,
-        applied: false
-      };
-      
-      // Save the improvement suggestion
-      saveImprovement(improvement);
-      
-      return improvement;
-    }
-    
-    // If electron API is not available, use our LLM utility
-    const prompt = `You are an AI system that helps improve code. Please analyze the following code and suggest improvements based on these requirements: ${requirements}
-    
-CODE:
-\`\`\`
-${code}
-\`\`\`
-
-Please provide an improved version of the code that meets the requirements better, without changing its core functionality. Include explanations of what you changed and why. Make sure your code is complete, valid, and can be used as a direct replacement.`;
-
-    const response = await queryLLM(prompt, 'ollama');
-    
-    // Extract the code from the response
-    const suggestedCode = extractCodeFromResponse(response.text);
-    
-    // Generate an explanation
-    const explanation = await generateExplanation(code, suggestedCode);
-    
-    const improvement: CodeImprovement = {
-      id: Date.now().toString(),
-      filePath,
-      originalCode: code,
-      suggestedCode,
-      explanation,
-      benefits: extractBenefits(explanation),
-      timestamp: Date.now(),
-      approved: false,
-      applied: false
+    const mods = getCodeModifications();
+    const newMod: CodeModification = {
+      ...modification,
+      id: `mod-${Date.now()}`,
+      timestamp: Date.now()
     };
     
-    // Save the improvement suggestion
-    saveImprovement(improvement);
+    mods.unshift(newMod);
+    localStorage.setItem(MODIFICATIONS_KEY, JSON.stringify(mods));
     
-    return improvement;
-  } catch (error) {
-    console.error('Error analyzing code:', error);
-    toast({
-      title: "Code Analysis Error",
-      description: "Failed to analyze code: " + (error instanceof Error ? error.message : String(error)),
-      variant: "destructive"
-    });
-    
-    throw error;
-  }
-};
-
-// Extract code from an LLM response
-const extractCodeFromResponse = (response: string): string => {
-  // Look for code blocks
-  const codeBlockRegex = /```(?:typescript|javascript|js|ts)?\s*([\s\S]*?)```/g;
-  const matches = [...response.matchAll(codeBlockRegex)];
-  
-  if (matches.length > 0) {
-    // Return the first code block
-    return matches[0][1].trim();
-  }
-  
-  // If no code blocks, try to extract the whole content
-  return response.trim();
-};
-
-// Generate an explanation for the code changes
-const generateExplanation = async (originalCode: string, modifiedCode: string): Promise<string> => {
-  try {
-    const prompt = `Compare these two code snippets and explain the changes made, including why they improve the code:
-    
-ORIGINAL CODE:
-\`\`\`
-${originalCode}
-\`\`\`
-
-MODIFIED CODE:
-\`\`\`
-${modifiedCode}
-\`\`\`
-
-Provide a clear, concise explanation of what was changed, why it's better, and what specific improvements were made (e.g., performance, readability, maintainability, etc.).`;
-
-    const response = await queryLLM(prompt, 'ollama');
-    return response.text;
-  } catch (error) {
-    console.error('Error generating explanation:', error);
-    return "Failed to generate explanation for code changes.";
-  }
-};
-
-// Extract benefits from the explanation
-const extractBenefits = (explanation: string): string[] => {
-  const benefits: string[] = [];
-  
-  // Look for common benefit indicators
-  const indicators = [
-    'improves', 'enhances', 'optimizes', 'better', 'increased',
-    'faster', 'cleaner', 'more readable', 'maintenance', 'performance'
-  ];
-  
-  // Split explanation into sentences
-  const sentences = explanation.split(/[.!?]+/);
-  
-  // Find sentences that mention benefits
-  for (const sentence of sentences) {
-    for (const indicator of indicators) {
-      if (sentence.toLowerCase().includes(indicator)) {
-        const benefit = sentence.trim();
-        if (benefit && !benefits.includes(benefit)) {
-          benefits.push(benefit);
-        }
-        break;
+    // Try to apply using electron if available
+    if (window.electron?.selfModify?.applyChange) {
+      const applied = await window.electron.selfModify.applyChange(newMod);
+      if (!applied) {
+        toast({
+          title: "Code Modification Failed",
+          description: "The system could not apply the code change automatically.",
+          variant: "destructive"
+        });
+        return false;
       }
     }
-  }
-  
-  // If we couldn't find specific benefits, add a general one
-  if (benefits.length === 0) {
-    benefits.push("Improved code quality and maintainability");
-  }
-  
-  return benefits;
-};
-
-// Get all code improvement suggestions
-export const getImprovementSuggestions = (): CodeImprovement[] => {
-  try {
-    const stored = localStorage.getItem(CODE_IMPROVEMENTS_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch (error) {
-    console.error('Error getting improvement suggestions:', error);
-    return [];
-  }
-};
-
-// Save a code improvement suggestion
-export const saveImprovement = (improvement: CodeImprovement): void => {
-  try {
-    const suggestions = getImprovementSuggestions();
-    
-    // Check if we already have this suggestion
-    const existingIndex = suggestions.findIndex(s => s.id === improvement.id);
-    
-    if (existingIndex >= 0) {
-      // Update existing suggestion
-      suggestions[existingIndex] = improvement;
-    } else {
-      // Add new suggestion
-      suggestions.push(improvement);
-    }
-    
-    localStorage.setItem(CODE_IMPROVEMENTS_KEY, JSON.stringify(suggestions));
-  } catch (error) {
-    console.error('Error saving improvement suggestion:', error);
-  }
-};
-
-// Apply an improvement suggestion
-export const applyImprovement = async (improvementId: string): Promise<boolean> => {
-  try {
-    const suggestions = getImprovementSuggestions();
-    const suggestionIndex = suggestions.findIndex(s => s.id === improvementId);
-    
-    if (suggestionIndex < 0) {
-      throw new Error('Improvement suggestion not found');
-    }
-    
-    const suggestion = suggestions[suggestionIndex];
-    
-    // Create a modification record
-    const modification: CodeModification = {
-      filePath: suggestion.filePath,
-      originalCode: suggestion.originalCode,
-      modifiedCode: suggestion.suggestedCode,
-      purpose: suggestion.explanation.split('.')[0] + '.',  // First sentence of explanation
-      timestamp: Date.now(),
-      appliedBy: 'ai',
-      approved: true
-    };
-    
-    // Save the modification
-    const saved = await saveModification(modification);
-    
-    if (saved) {
-      // Update the suggestion status
-      suggestion.applied = true;
-      suggestions[suggestionIndex] = suggestion;
-      localStorage.setItem(CODE_IMPROVEMENTS_KEY, JSON.stringify(suggestions));
-      
-      toast({
-        title: "Code Improvement Applied",
-        description: "The code improvement has been successfully applied.",
-      });
-      
-      return true;
-    }
-    
-    return false;
-  } catch (error) {
-    console.error('Error applying improvement:', error);
-    toast({
-      title: "Error",
-      description: "Failed to apply code improvement: " + (error instanceof Error ? error.message : String(error)),
-      variant: "destructive"
-    });
-    
-    return false;
-  }
-};
-
-// Reject an improvement suggestion
-export const rejectImprovement = (improvementId: string): boolean => {
-  try {
-    const suggestions = getImprovementSuggestions();
-    const suggestionIndex = suggestions.findIndex(s => s.id === improvementId);
-    
-    if (suggestionIndex < 0) {
-      throw new Error('Improvement suggestion not found');
-    }
-    
-    // Remove the suggestion
-    suggestions.splice(suggestionIndex, 1);
-    localStorage.setItem(CODE_IMPROVEMENTS_KEY, JSON.stringify(suggestions));
     
     toast({
-      title: "Suggestion Rejected",
-      description: "The code improvement suggestion has been rejected."
+      title: "Code Modification Recorded",
+      description: `A change to ${modification.file} was suggested for ${modification.purpose}.`
     });
     
     return true;
   } catch (error) {
-    console.error('Error rejecting improvement:', error);
+    console.error('Error adding code modification:', error);
+    toast({
+      title: "Error",
+      description: "Failed to record code modification.",
+      variant: "destructive"
+    });
     return false;
   }
 };
 
-// Let the AI suggest improvements to a specific core component
-export const initiateAutoImprovement = async (component: string): Promise<void> => {
-  toast({
-    title: "AI Self-Improvement",
-    description: `Analyzing ${component} for potential improvements...`,
-  });
-  
+// Approve a code modification
+export const approveModification = async (id: string): Promise<boolean> => {
   try {
-    // This would normally read the component code from the file system
-    // In this mock version, we'll simulate it
+    const mods = getCodeModifications();
+    const modIndex = mods.findIndex(mod => mod.id === id);
     
-    // Mock code analysis
-    setTimeout(() => {
-      toast({
-        title: "AI Self-Improvement",
-        description: `Analysis complete. Found 3 potential improvements for ${component}.`,
-      });
-    }, 2000);
+    if (modIndex === -1) {
+      return false;
+    }
+    
+    mods[modIndex].approved = true;
+    localStorage.setItem(MODIFICATIONS_KEY, JSON.stringify(mods));
+    
+    // Try to apply using electron if available
+    if (window.electron?.selfModify?.applyChange) {
+      await window.electron.selfModify.applyChange(mods[modIndex]);
+    }
+    
+    return true;
   } catch (error) {
-    console.error('Error initiating auto-improvement:', error);
-    toast({
-      title: "Error",
-      description: "Failed to analyze component for improvements.",
-      variant: "destructive"
-    });
+    console.error('Error approving modification:', error);
+    return false;
   }
 };
+
+// Reject a code modification
+export const rejectModification = (id: string): boolean => {
+  try {
+    const mods = getCodeModifications();
+    const filteredMods = mods.filter(mod => mod.id !== id);
+    
+    if (filteredMods.length === mods.length) {
+      return false;
+    }
+    
+    localStorage.setItem(MODIFICATIONS_KEY, JSON.stringify(filteredMods));
+    return true;
+  } catch (error) {
+    console.error('Error rejecting modification:', error);
+    return false;
+  }
+};
+
+// Analyze code for potential improvements
+export const analyzeCode = async (code: string, requirements: string): Promise<string> => {
+  try {
+    // Try to use electron API first
+    if (window.electron?.selfModify?.suggestImprovement) {
+      return await window.electron.selfModify.suggestImprovement(code, requirements);
+    }
+    
+    // Mock implementation for browser environments
+    return "Code analysis would look for optimizations based on your requirements. This feature requires the Electron app environment to work fully.";
+  } catch (error) {
+    console.error('Error analyzing code:', error);
+    return "Error analyzing code. Please try again.";
+  }
+};
+
+// Analyze specific file
+export const analyzeFile = async (filePath: string): Promise<string> => {
+  try {
+    // Try to use electron API first
+    if (window.electron?.selfModify?.analyzeCode) {
+      return await window.electron.selfModify.analyzeCode(filePath);
+    }
+    
+    // Mock implementation for browser environments
+    return `File analysis of ${filePath} would examine code quality, complexity and potential improvements. This feature requires the Electron app environment to work fully.`;
+  } catch (error) {
+    console.error('Error analyzing file:', error);
+    return "Error analyzing file. Please try again.";
+  }
+};
+
+// Self-improvement system that periodically checks for code to optimize
+export const initializeSelfImprovement = () => {
+  // Run self-improvement check every 24 hours
+  setInterval(async () => {
+    try {
+      // Check for files that could be improved
+      // In a real implementation, this would analyze the codebase
+      // and identify sections that could be improved
+      console.log("Running self-improvement analysis...");
+      
+      // Example mock improvement
+      const mockImprovement: Omit<CodeModification, 'id' | 'timestamp'> = {
+        file: "src/utils/example.ts",
+        original: "// Original code would be here",
+        modified: "// Modified code with improvements would be here",
+        purpose: "Automatic optimization",
+        improvement: "Improved algorithm efficiency by restructuring data processing",
+        appliedBy: 'ai',
+        approved: false,
+        metrics: {
+          efficiency: 0.8,
+          readability: 0.7,
+          functionality: 1.0
+        }
+      };
+      
+      // In a real implementation, this would be an actual improvement
+      // found by analyzing the codebase
+      
+      // For now, let's not add mock improvements to avoid spamming
+      // await addCodeModification(mockImprovement);
+    } catch (error) {
+      console.error('Error in self-improvement routine:', error);
+    }
+  }, 24 * 60 * 60 * 1000); // 24 hours
+};
+
+// Define strategies for self-improvement
+export const selfImprovementStrategies = {
+  optimizePerformance: async (code: string): Promise<string> => {
+    // This would use advanced techniques to optimize code performance
+    return code; // Mock implementation
+  },
+  
+  improveReadability: async (code: string): Promise<string> => {
+    // This would enhance code readability
+    return code; // Mock implementation
+  },
+  
+  addDocumentation: async (code: string): Promise<string> => {
+    // This would add or enhance documentation
+    return code; // Mock implementation
+  },
+  
+  refactorCode: async (code: string): Promise<string> => {
+    // This would refactor code to follow best practices
+    return code; // Mock implementation
+  }
+};
+
+// Initialize self-improvement system
+if (typeof window !== 'undefined') {
+  initializeSelfImprovement();
+}
