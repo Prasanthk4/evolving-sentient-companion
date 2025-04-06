@@ -1,5 +1,5 @@
 import { toast } from "@/components/ui/use-toast";
-import { elevenLabsTTS } from "./elevenlabsTTS";
+import { elevenlabsTTS } from "./elevenlabsTTS";
 
 // Types for TTS
 export interface TTSOptions {
@@ -89,7 +89,7 @@ class TextToSpeech {
   // Check if TTS is available
   isAvailable(): boolean {
     return (typeof window !== 'undefined' && 'speechSynthesis' in window) || 
-           elevenLabsTTS.isInitialized();
+           elevenlabsTTS.isInitialized();
   }
   
   // Check if currently speaking
@@ -105,9 +105,9 @@ class TextToSpeech {
     }
     
     // Try to get voices from ElevenLabs
-    if (this.settings.useElevenLabs && elevenLabsTTS.isInitialized()) {
+    if (this.settings.useElevenLabs && elevenlabsTTS.isInitialized()) {
       try {
-        const elevenLabsVoices = await elevenLabsTTS.getVoices();
+        const elevenLabsVoices = await elevenlabsTTS.getAvailableVoices();
         return [
           ...this.voices.map(voice => ({
             id: voice.name,
@@ -118,7 +118,7 @@ class TextToSpeech {
           ...elevenLabsVoices.map(voice => ({
             id: voice.voice_id,
             name: `${voice.name} (ElevenLabs)`,
-            isDefault: voice.voice_id === elevenLabsTTS.getDefaultVoice(),
+            isDefault: voice.voice_id === elevenlabsTTS.getDefaultVoice(),
             source: 'elevenlabs'
           }))
         ];
@@ -166,11 +166,11 @@ class TextToSpeech {
       }
       
       // Use ElevenLabs if enabled and available
-      if (this.settings.useElevenLabs && elevenLabsTTS.isInitialized()) {
+      if (this.settings.useElevenLabs && elevenlabsTTS.isInitialized()) {
         // Check if the selected voice is from ElevenLabs
         if (opts.voice && opts.voice.length > 10) {
           // Likely an ElevenLabs voice ID
-          const audioUrl = await elevenLabsTTS.speak(text, {
+          const audioUrl = await elevenlabsTTS.speak(text, {
             voice_id: opts.voice
           });
           

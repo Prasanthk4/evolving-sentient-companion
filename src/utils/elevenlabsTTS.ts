@@ -186,10 +186,12 @@ export class ElevenLabsTTS {
   
   // Generate speech
   public async speak(text: string, options?: {
-    voiceId?: string;
-    model?: ElevenLabsModel;
-    stability?: number;
-    similarityBoost?: number;
+    voice_id?: string;
+    model_id?: ElevenLabsModel;
+    voice_settings?: {
+      stability?: number;
+      similarity_boost?: number;
+    }
   }): Promise<boolean> {
     // If no API key is set, use system TTS
     if (!this.settings.apiKey) {
@@ -200,10 +202,10 @@ export class ElevenLabsTTS {
     if (window.electron?.elevenlabs?.textToSpeech) {
       try {
         const audioUrl = await window.electron.elevenlabs.textToSpeech(text, {
-          voiceId: options?.voiceId || this.settings.defaultVoiceId,
-          model: options?.model || this.settings.defaultModel,
-          stability: options?.stability !== undefined ? options.stability : this.settings.stability,
-          similarityBoost: options?.similarityBoost !== undefined ? options.similarityBoost : this.settings.similarityBoost
+          voiceId: options?.voice_id || this.settings.defaultVoiceId,
+          model: options?.model_id || this.settings.defaultModel,
+          stability: options?.voice_settings?.stability !== undefined ? options.voice_settings.stability : this.settings.stability,
+          similarityBoost: options?.voice_settings?.similarity_boost !== undefined ? options.voice_settings.similarity_boost : this.settings.similarityBoost
         });
         
         if (this.audioElement) {
@@ -217,8 +219,8 @@ export class ElevenLabsTTS {
           
           // Add to history
           this.addToHistory(text, {
-            voiceId: options?.voiceId || this.settings.defaultVoiceId,
-            model: options?.model || this.settings.defaultModel
+            voiceId: options?.voice_id || this.settings.defaultVoiceId,
+            model: options?.model_id || this.settings.defaultModel
           });
           
           return true;
@@ -300,6 +302,16 @@ export class ElevenLabsTTS {
     
     // Fall back to default voices
     return DEFAULT_VOICES;
+  }
+
+  // Get default voice
+  public getDefaultVoice(): string {
+    return this.settings.defaultVoiceId;
+  }
+
+  // Check if initialized
+  public isInitialized(): boolean {
+    return true;  // Always initialized after construction
   }
   
   // Add to history

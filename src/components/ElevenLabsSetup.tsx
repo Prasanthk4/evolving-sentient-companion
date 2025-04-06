@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { elevenLabsTTS, ElevenLabsModel } from '@/utils/elevenlabsTTS';
+import { elevenlabsTTS, ElevenLabsModel } from '@/utils/elevenlabsTTS';
 
 const ElevenLabsSetup = () => {
   const [apiKey, setApiKey] = useState<string>('');
@@ -21,7 +21,7 @@ const ElevenLabsSetup = () => {
   
   // Check if API key exists on mount
   useEffect(() => {
-    const hasKey = elevenLabsTTS.hasApiKey();
+    const hasKey = elevenlabsTTS.hasApiKey();
     setHasApiKey(hasKey);
     
     if (hasKey) {
@@ -29,23 +29,23 @@ const ElevenLabsSetup = () => {
     }
     
     // Set up callbacks
-    elevenLabsTTS.onStart(() => {
+    elevenlabsTTS.onStart(() => {
       setIsSpeaking(true);
     });
     
-    elevenLabsTTS.onEnd(() => {
+    elevenlabsTTS.onEnd(() => {
       setIsSpeaking(false);
     });
     
     return () => {
-      elevenLabsTTS.stop();
+      elevenlabsTTS.stop();
     };
   }, []);
   
   // Load available voices
   const loadVoices = async () => {
     try {
-      const voices = await elevenLabsTTS.getVoices();
+      const voices = await elevenlabsTTS.getVoices();
       setAvailableVoices(voices);
       
       if (voices.length > 0 && !selectedVoice) {
@@ -60,7 +60,7 @@ const ElevenLabsSetup = () => {
   const saveApiKey = () => {
     if (!apiKey.trim()) return;
     
-    elevenLabsTTS.setApiKey(apiKey.trim());
+    elevenlabsTTS.setApiKey(apiKey.trim());
     setHasApiKey(true);
     loadVoices();
   };
@@ -68,16 +68,16 @@ const ElevenLabsSetup = () => {
   // Speak sample text
   const speakSample = () => {
     if (isSpeaking) {
-      elevenLabsTTS.stop();
+      elevenlabsTTS.stop();
       setIsSpeaking(false);
       return;
     }
     
     if (!sampleText.trim()) return;
     
-    elevenLabsTTS.speak(sampleText, {
+    elevenlabsTTS.speak(sampleText, {
       voice_id: selectedVoice,
-      model_id: model,
+      model_id: model as ElevenLabsModel,
       voice_settings: {
         stability: 0.5,
         similarity_boost: 0.75
@@ -88,8 +88,8 @@ const ElevenLabsSetup = () => {
   // Set as default voice
   const setAsDefault = () => {
     if (selectedVoice) {
-      elevenLabsTTS.setDefaultVoice(selectedVoice);
-      elevenLabsTTS.setDefaultModel(model as ElevenLabsModel);
+      elevenlabsTTS.setDefaultVoice(selectedVoice);
+      elevenlabsTTS.setDefaultModel(model as ElevenLabsModel);
     }
   };
   
