@@ -172,6 +172,11 @@ export class ElevenLabsTTS {
     });
   }
   
+  // Get available voices
+  public getAvailableVoices = async (): Promise<any[]> => {
+    return await this.getVoices();
+  }
+  
   // Fetch available voices
   public async getVoices(): Promise<any[]> {
     if (!this.initialized) {
