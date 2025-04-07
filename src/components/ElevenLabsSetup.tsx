@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Key, Mic, VolumeX, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -7,42 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ElevenLabsModel } from '@/utils/elevenlabsTTS';
-
-// Create a mock ElevenLabsTTS for the component if elevenlabsTTS.ts doesn't provide it
-const elevenlabsTTS = {
-  hasApiKey: () => {
-    return localStorage.getItem('elevenlabs-api-key') !== null;
-  },
-  setApiKey: (key: string) => {
-    localStorage.setItem('elevenlabs-api-key', key);
-  },
-  getVoices: async () => {
-    return [
-      { voice_id: 'mock-voice-1', name: 'Adam' },
-      { voice_id: 'mock-voice-2', name: 'Bella' },
-      { voice_id: 'mock-voice-3', name: 'Charlie' }
-    ];
-  },
-  speak: (text: string, options: any) => {
-    console.log('Speaking:', text, options);
-  },
-  stop: () => {
-    console.log('Speech stopped');
-  },
-  setDefaultVoice: (voiceId: string) => {
-    localStorage.setItem('elevenlabs-default-voice', voiceId);
-  },
-  setDefaultModel: (model: ElevenLabsModel) => {
-    localStorage.setItem('elevenlabs-default-model', model);
-  },
-  onStart: (callback: () => void) => {
-    window.addEventListener('elevenlabs-start', callback);
-  },
-  onEnd: (callback: () => void) => {
-    window.addEventListener('elevenlabs-end', callback);
-  }
-};
+import { ElevenLabsModel, elevenlabsTTS } from '@/utils/elevenlabsTTS';
 
 const ElevenLabsSetup = () => {
   const [apiKey, setApiKey] = useState<string>('');
