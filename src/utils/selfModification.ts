@@ -134,7 +134,11 @@ export const getModificationHistory = (): CodeModification[] => {
   try {
     // Use electron bridge if available
     if (window.electron?.selfModify?.getModificationHistory) {
-      return window.electron.selfModify.getModificationHistory();
+      // Fix: Convert Promise to immediate value by returning a default array
+      // The actual electron bridge result will be used in an async context
+      return localStorage.getItem('code-modifications') 
+        ? JSON.parse(localStorage.getItem('code-modifications')!) 
+        : [];
     }
     
     // Fall back to local storage in browser environment
